@@ -28,10 +28,11 @@ import os
 import sys
 import time
 
-import numpy
+import numpy as np
 from six.moves import urllib
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+import algos
 
 SOURCE_URL = 'http://yann.lecun.com/exdb/mnist/'
 WORK_DIRECTORY = 'data'
@@ -49,7 +50,7 @@ EVAL_FREQUENCY = 100  # Number of steps between evaluations.
 
 
 tf.app.flags.DEFINE_boolean("self_test", False, "True if running a self test.")
-tf.app.flags.DEFINE_boolean("train_cnn", True, "True for training the CNN feature representation.")
+tf.app.flags.DEFINE_boolean("train_cnn", False, "True for training the CNN feature representation.")
 tf.app.flags.DEFINE_boolean("train_sgd", False, "SGD")
 tf.app.flags.DEFINE_boolean("train_svrg", False, "SVRG")
 tf.app.flags.DEFINE_boolean("train_miso", False, "MISO")
@@ -78,7 +79,7 @@ def extract_data(filename, num_images):
   with gzip.open(filename) as bytestream:
     bytestream.read(16)
     buf = bytestream.read(IMAGE_SIZE * IMAGE_SIZE * num_images)
-    data = numpy.frombuffer(buf, dtype=numpy.uint8).astype(numpy.float32)
+    data = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
     data = (data - (PIXEL_DEPTH / 2.0)) / PIXEL_DEPTH
     data = data.reshape(num_images, IMAGE_SIZE, IMAGE_SIZE, 1)
     return data
@@ -90,16 +91,16 @@ def extract_labels(filename, num_images):
   with gzip.open(filename) as bytestream:
     bytestream.read(8)
     buf = bytestream.read(1 * num_images)
-    labels = numpy.frombuffer(buf, dtype=numpy.uint8).astype(numpy.int64)
+    labels = np.frombuffer(buf, dtype=np.uint8).astype(np.int64)
   return labels
 
 
 def fake_data(num_images):
   """Generate a fake dataset that matches the dimensions of MNIST."""
-  data = numpy.ndarray(
+  data = np.ndarray(
       shape=(num_images, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS),
-      dtype=numpy.float32)
-  labels = numpy.zeros(shape=(num_images,), dtype=numpy.int64)
+      dtype=np.float32)
+  labels = np.zeros(shape=(num_images,), dtype=np.int64)
   for image in xrange(num_images):
     label = image % 2
     data[image, :, :, 0] = label - 0.5
@@ -111,7 +112,7 @@ def error_rate(predictions, labels):
   """Return the error rate based on dense predictions and sparse labels."""
   return 100.0 - (
       100.0 *
-      numpy.sum(numpy.argmax(predictions, 1) == labels) /
+      np.sum(np.argmax(predictions, 1) == labels) /
       predictions.shape[0])
 
 def tf_error_rate(predictions, labels):
@@ -263,7 +264,7 @@ class Dataset(object):
       size = data.shape[0]
       if size < EVAL_BATCH_SIZE:
         raise ValueError("batch size for evals larger than dataset: %d" % size)
-      features = numpy.ndarray(shape=(size, DIM_FEATURES), dtype=numpy.float32)
+      features = np.ndarray(shape=(size, DIM_FEATURES), dtype=np.float32)
       for begin in xrange(0, size, EVAL_BATCH_SIZE):
         end = begin + EVAL_BATCH_SIZE
         if end <= size:
@@ -356,7 +357,7 @@ def train_cnn():
     size = data.shape[0]
     if size < EVAL_BATCH_SIZE:
       raise ValueError("batch size for evals larger than dataset: %d" % size)
-    predictions = numpy.ndarray(shape=(size, NUM_LABELS), dtype=numpy.float32)
+    predictions = np.ndarray(shape=(size, NUM_LABELS), dtype=np.float32)
     for begin in xrange(0, size, EVAL_BATCH_SIZE):
       end = begin + EVAL_BATCH_SIZE
       if end <= size:
@@ -411,9 +412,10 @@ class EpochRunner(object):
   model_cls = CNNModel
   model_filename = 'models/mnist'
 
-  def __init__(self, compute_test_features=True):
+  def __init__(self, compute_test_features=True, verbose=False):
     self.ds = self.dataset_cls()
     self.train_size = self.ds.train_labels.shape[0]
+    self.verbose = verbose
 
     self.m = self.model_cls()
 
@@ -451,7 +453,7 @@ class EpochRunner(object):
       features, labels, indexes = self.sess.run(
           [self.feats, self.ds.labels, self.ds.indexes])
       yield (features, labels, indexes)
-      if step % EVAL_FREQUENCY == 0:
+      if self.verbose and step % EVAL_FREQUENCY == 0:
         elapsed_time = time.time() - start_time
         start_time = time.time()
         print('Step %d (epoch %.2f), %.1f ms' %
@@ -490,17 +492,102 @@ def run_on_train_data(func, num_epochs=1):
                1000 * elapsed_time / EVAL_FREQUENCY))
 
 
+def train_sgd():
+  loss = algos.LogisticLoss()
+  sgd = algos.SGD(np.zeros(DIM_FEATURES), lr=0.01, decay=0.8, lmbda=1., loss=loss)
+
+  target_label = 4
+
+  with EpochRunner() as r:
+    val_y = (r.ds.validation_labels == target_label).astype(np.int32)
+    test_y = (r.ds.test_labels == target_label).astype(np.int32)
+
+    for epoch in range(15):
+      print('Epoch %d, val loss: %.3f, test loss: %.3f' %
+            (epoch,
+             loss.compute(r.ds.validation_features.dot(sgd.w), val_y).mean(),
+             loss.compute(r.ds.test_features.dot(sgd.w), test_y).mean()))
+
+      sgd.begin_epoch(epoch)
+
+      for xs, ys, idxs in r.iter_epoch():
+        for x, y, idx in zip(xs, ys, idxs):
+          sgd.iterate(x, 1 if y == target_label else 0, idx)
+
+    print('Final epoch, val loss: %.3f, test loss: %.3f' %
+          (loss.compute(r.ds.validation_features.dot(sgd.w), val_y).mean(),
+           loss.compute(r.ds.test_features.dot(sgd.w), test_y).mean()))
+
+
 def train_svrg():
-  pass
+  loss = algos.LogisticLoss()
+  svrg = algos.SVRG(np.zeros(DIM_FEATURES), lr=0.01, lmbda=1., loss=loss)
+
+  target_label = 4
+
+  with EpochRunner() as r:
+    val_y = (r.ds.validation_labels == target_label).astype(np.int32)
+    test_y = (r.ds.test_labels == target_label).astype(np.int32)
+
+    Xtrain = np.zeros((r.train_size, DIM_FEATURES))
+    ytrain = np.zeros(r.train_size, dtype=np.int32)
+
+    epoch = 0
+    for s in range(3):
+      for i, (xs, ys, idxs) in enumerate(r.iter_epoch()):
+        Xtrain[i * BATCH_SIZE:(i + 1) * BATCH_SIZE,:] = xs
+        ytrain[i * BATCH_SIZE:(i + 1) * BATCH_SIZE] = (ys == target_label)
+
+      svrg.begin_pass(Xtrain, ytrain)
+
+      for e in range(2):
+        print('Epoch %d (pass %d), val loss: %.3f, test loss: %.3f' %
+              (epoch, s,
+               loss.compute(r.ds.validation_features.dot(svrg.w), val_y).mean(),
+               loss.compute(r.ds.test_features.dot(svrg.w), test_y).mean()))
+        epoch += 1
+        for xs, ys, idxs in r.iter_epoch():
+          for x, y, idx in zip(xs, ys, idxs):
+            svrg.iterate(x, 1 if y == target_label else 0, idx)
+
+    print('Final pass, val loss: %.3f, test loss: %.3f' %
+          (loss.compute(r.ds.validation_features.dot(svrg.w), val_y).mean(),
+           loss.compute(r.ds.test_features.dot(svrg.w), test_y).mean()))
 
 
 def train_miso():
-  pass
+  loss = algos.LogisticLoss()
+
+  target_label = 4
+
+  with EpochRunner() as r:
+    miso = algos.MISO(np.zeros(DIM_FEATURES), n=r.train_size, lmbda=1., loss=loss)
+
+    val_y = (r.ds.validation_labels == target_label).astype(np.int32)
+    test_y = (r.ds.test_labels == target_label).astype(np.int32)
+
+    for epoch in range(15):
+      print('Epoch %d, val loss: %.3f, test loss: %.3f' %
+            (epoch,
+             loss.compute(r.ds.validation_features.dot(miso.w), val_y).mean(),
+             loss.compute(r.ds.test_features.dot(miso.w), test_y).mean()))
+
+      miso.begin_epoch(epoch)
+
+      for xs, ys, idxs in r.iter_epoch():
+        for x, y, idx in zip(xs, ys, idxs):
+          miso.iterate(x, 1 if y == target_label else 0, idx)
+
+    print('Final epoch, val loss: %.3f, test loss: %.3f' %
+          (loss.compute(r.ds.validation_features.dot(miso.w), val_y).mean(),
+           loss.compute(r.ds.test_features.dot(miso.w), test_y).mean()))
 
 
 def main(argv=None):  # pylint: disable=unused-argument
   if FLAGS.train_cnn:
     train_cnn()
+  elif FLAGS.train_sgd:
+    train_sgd()
   elif FLAGS.train_svrg:
     train_svrg()
   elif FLAGS.train_miso:
