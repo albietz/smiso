@@ -224,6 +224,7 @@ class Dataset(object):
       self.train_data = train_data[VALIDATION_SIZE:, ...]
       self.train_labels = train_labels[VALIDATION_SIZE:]
 
+    self.train_features = None
     self.validation_features = None
     self.test_features = None
 
@@ -256,7 +257,7 @@ class Dataset(object):
     sess.run(self.input_indexes.initializer,
              feed_dict={self.indexes_initializer: range(self.train_labels.shape[0])})
 
-  def init_test_features(self, eval_data, eval_op, sess):
+  def init_test_features(self, eval_data, eval_op, sess, init_train=False):
     '''Initialize feature vectors on validation/test data from a given model.'''
 
     def eval_in_batches(data):
@@ -278,6 +279,8 @@ class Dataset(object):
           features[begin:, :] = batch_features[begin - size:, :]
       return features
 
+    if init_train:
+      self.train_features = eval_in_batches(self.train_data)
     self.validation_features = eval_in_batches(self.validation_data)
     self.test_features = eval_in_batches(self.test_data)
 
