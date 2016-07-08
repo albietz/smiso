@@ -119,7 +119,12 @@ class MISO(Solver):
             self.c = np.zeros(self.n)
 
         self.t = 1
+        self.t0 = 1
         self.wavg = self.w
+
+    def begin_decay(self):
+        self.t0 = self.t
+        self.decay = True
 
     def begin_epoch(self, epoch):
         pass
@@ -128,10 +133,10 @@ class MISO(Solver):
         pred = x.dot(self.w)
         g = self.loss.compute_gradient(x, pred, y)
         if len(g.shape) > 1:
-                g = g.mean(0)
+            g = g.mean(0)
         step = 1.
         if self.decay:
-                step = min(1., 2. * self.n / (self.t + 1))
+            step = min(1., 2. * self.n / (self.t - self.t0 + self.n))
         # zi <- w - 1/lambda (grad f_i + lambda w)
         zi = (1 - step) * self.z[idx] - step / self.lmbda * g
         if self.compute_lb:
@@ -142,8 +147,51 @@ class MISO(Solver):
         self.z[idx] = zi
 
         self.t += 1
-        self.wavg = (1 - 1./self.t) * self.wavg + 1./self.t * self.w
+        delta = 1. / (self.t - self.t0)
+        self.wavg = (1 - delta) * self.wavg + delta * self.w
 
     def lower_bound(self, w):
         assert self.compute_lb, "compute_lb wasn't set to True"
         return (self.c - self.lmbda * self.z.dot(w)).mean() + 0.5 * self.lmbda * (w ** 2).sum()
+
+
+class SAGA(Solver):
+    def __init__(self, w0, n, lr=0.1, lmbda=0.1, decay=False, loss=None, compute_lb=False):
+        self.w = w0.copy()
+        self.n = n  # number of examples in training set
+        self.lmbda = lmbda  # regularization param (= 1 / stepsize)
+        self.lr = lr  # learning rate
+        self.loss = loss or LogisticLoss()
+        self.decay = decay
+
+        self.z = np.zeros((self.n, self.w.shape[0]))
+        self.zbar = np.zeros(self.w.shape)
+
+        self.t = 1
+        self.t0 = 1
+        self.wavg = self.w
+
+    def begin_decay(self):
+        self.t0 = self.t
+        self.decay = True
+
+    def begin_epoch(self, epoch):
+        pass
+
+    def iterate(self, x, y, idx):
+        pred = x.dot(self.w)
+        g = self.loss.compute_gradient(x, pred, y)
+        if len(g.shape) > 1:
+            g = g.mean(0)
+        g += self.lmbda * self.w
+        step = self.lr
+        if self.decay:
+            step *= self.n / (self.t - self.t0 + self.n)
+
+        self.w = self.w - step * (g - self.z[idx] + self.zbar)
+        self.zbar = self.zbar + 1. / self.n * (g - self.z[idx])
+        self.z[idx] = g
+
+        self.t += 1
+        delta = 1. / (self.t - self.t0)
+        self.wavg = (1 - delta) * self.wavg + delta * self.w
