@@ -54,4 +54,17 @@ void iterateBlock(SolverT& solver,
     solver.iterate(Xmap.row(i), yData[i], idxData[i]);
   }
 }
+
+template <typename SolverT>
+void iterateBlockIndexed(SolverT& solver,
+                         const size_t dataSize,
+                         const Double* const XData,
+                         const Double* const yData,
+                         const size_t blockSize,
+                         const int64_t* const idxData) {
+  const MatrixMap Xmap(XData, dataSize, solver.nfeatures());
+  for (size_t i = 0; i < blockSize; ++i) {
+    solver.iterate(Xmap.row(idxData[i]), yData[idxData[i]], idxData[i]);
+  }
+}
 }

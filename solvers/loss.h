@@ -27,10 +27,10 @@ Vector computeGradient(const std::string& loss,
                        const Double pred,
                        const Double y) {
   if (loss == "l2") {
-    return (pred - y) * x;
+    return (pred - y) * x.transpose();
   } else if (loss == "logistic") {
     const auto sigm = 1.0 / (1 + std::exp(-pred));
-    return (sigm - y) * x;
+    return (sigm - y) * x.transpose();
   } else {
     std::cerr << "loss not supported: " << loss;
     return Vector::Zero(x.size());

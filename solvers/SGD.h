@@ -23,7 +23,7 @@ class SGD : public Solver {
   }
 
   template <typename Derived>
-  void iterate(const Eigen::MatrixBase<Derived>& x,
+  void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
                const Double y,
                const size_t idx) {
     const Double stepSize = decay_ ? lr_ / (t_ - t0_ + 1) : lr_;
