@@ -41,8 +41,6 @@ class SGD : public Solver {
 
   const Double lambda_;
 
-  const std::string loss_;
-
   bool decay_;
 
   size_t t_; // iteration

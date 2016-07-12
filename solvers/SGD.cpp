@@ -7,10 +7,9 @@ SGD::SGD(const size_t nfeatures,
          const Double lr,
          const Double lambda,
          const std::string& loss)
-  : Solver(nfeatures),
+  : Solver(nfeatures, loss),
     lr_(lr),
     lambda_(lambda),
-    loss_(loss),
     decay_(false),
     t_(1),
     t0_(1) {

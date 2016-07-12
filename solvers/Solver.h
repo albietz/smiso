@@ -9,9 +9,11 @@ namespace solvers {
 
 class Solver {
  public:
-  explicit Solver(const size_t nfeatures)
+  Solver(const size_t nfeatures,
+         const std::string& loss)
     : nfeatures_(nfeatures),
-      w_(Vector::Zero(nfeatures_)) {
+      w_(Vector::Zero(nfeatures_)),
+      loss_(loss) {
   }
 
   // delete copy and move constructors
@@ -37,6 +39,8 @@ class Solver {
 
  protected:
   Vector w_;
+
+  const std::string loss_;
 };
 
 template <typename SolverT>
