@@ -4,7 +4,7 @@
 #include <string>
 
 #include "common.h"
-#include "loss.h"
+#include "Loss.h"
 #include "Solver.h"
 
 namespace solvers {
@@ -14,7 +14,8 @@ class MISO : public Solver {
   MISO(const size_t nfeatures,
        const size_t nexamples,
        const Double lambda,
-       const std::string& loss);
+       const std::string& loss,
+       const bool computeLB);
 
   void startDecay();
 
@@ -33,11 +34,18 @@ class MISO : public Solver {
     const Double stepSize = decay_ ?
       std::min<Double>(1, 2 * static_cast<Double>(n_) / (t_ - t0_ + n_)) : 1;
 
-    const auto grad = computeGradient(loss_, x, x * w_, y);
+    const Double pred = x * w_;
+
+    const auto grad = Loss::computeGradient(loss_, x, pred, y);
 
     const auto ziOld = z_.row(idx).transpose();
 
     const Vector zi = (1 - stepSize) * ziOld - stepSize / lambda_ * grad;
+
+    if (computeLB_) {
+      c_[idx] = (1 - stepSize) * c_[idx] +
+        stepSize * (Loss::computeLoss(loss_, pred, y) - grad.dot(w_));
+    }
 
     w_ = w_ + 1.0 / n_ * (zi - ziOld);
 
@@ -45,6 +53,8 @@ class MISO : public Solver {
 
     ++t_;
   }
+
+  Double lowerBound() const;
 
  private:
   const size_t n_; // number of examples/clusters in the dataset
@@ -58,5 +68,9 @@ class MISO : public Solver {
   size_t t_; // iteration
 
   size_t t0_;
+
+  bool computeLB_; // whether to compute lower bounds
+
+  Vector c_; // for computing lower bounds
 };
 }

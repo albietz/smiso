@@ -4,7 +4,7 @@
 #include <string>
 
 #include "common.h"
-#include "loss.h"
+#include "Loss.h"
 #include "Solver.h"
 
 namespace solvers {
@@ -28,7 +28,7 @@ class SGD : public Solver {
                const size_t idx) {
     const Double stepSize = decay_ ? lr_ / (t_ - t0_ + 1) : lr_;
 
-    const auto grad = computeGradient(loss_, x, x * w_, y);
+    const auto grad = Loss::computeGradient(loss_, x, x * w_, y);
 
     // SGD update
     w_ = w_ - stepSize * (grad + lambda_ * w_);

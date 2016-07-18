@@ -16,6 +16,9 @@ class Solver {
       loss_(loss) {
   }
 
+  virtual ~Solver() {
+  }
+
   // delete copy and move constructors
   Solver(const Solver&) = delete;
   Solver(Solver&&) = delete;

@@ -6,7 +6,11 @@
 
 namespace solvers {
 
+#if USE_FLOAT
 using Double = float;
+#else
+using Double = double;
+#endif
 
 using Matrix =
   Eigen::Matrix<Double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
