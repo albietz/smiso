@@ -18,6 +18,8 @@ class SGD : public Solver {
 
   void startDecay();
 
+  void decay(const double multiplier = 0.5);
+
   size_t t() const {
     return t_;
   }
@@ -37,7 +39,7 @@ class SGD : public Solver {
   }
 
  private:
-  const Double lr_;
+  Double lr_;
 
   const Double lambda_;
 

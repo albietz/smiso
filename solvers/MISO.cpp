@@ -11,6 +11,7 @@ MISO::MISO(const size_t nfeatures,
   : Solver(nfeatures, loss),
     n_(nexamples),
     z_(Matrix::Zero(nexamples, nfeatures)),
+    alpha_(1.0),
     lambda_(lambda),
     decay_(false),
     t_(1),
@@ -24,6 +25,10 @@ MISO::MISO(const size_t nfeatures,
 void MISO::startDecay() {
   decay_ = true;
   t0_ = t_;
+}
+
+void MISO::decay(const double multiplier) {
+  alpha_ *= multiplier;
 }
 
 Double MISO::lowerBound() const {

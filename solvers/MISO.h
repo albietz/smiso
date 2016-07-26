@@ -19,6 +19,8 @@ class MISO : public Solver {
 
   void startDecay();
 
+  void decay(const double multiplier = 0.5);
+
   size_t nexamples() const {
     return n_;
   }
@@ -32,7 +34,7 @@ class MISO : public Solver {
                const Double y,
                const size_t idx) {
     const Double stepSize = decay_ ?
-      std::min<Double>(1, 2 * static_cast<Double>(n_) / (t_ - t0_ + n_)) : 1;
+      std::min<Double>(alpha_, 2 * static_cast<Double>(n_) / (t_ - t0_ + n_)) : alpha_;
 
     const Double pred = x * w_;
 
@@ -60,6 +62,8 @@ class MISO : public Solver {
   const size_t n_; // number of examples/clusters in the dataset
 
   Matrix z_;
+
+  Double alpha_; // step size
 
   const Double lambda_;
 

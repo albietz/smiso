@@ -47,6 +47,7 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
     cdef cppclass _SGD "solvers::SGD":
         _SGD(size_t dim, Double lr, Double lmbda, string loss)
         void startDecay()
+        void decay(Double mult)
         size_t t()
         size_t nfeatures()
         Double* wdata()
@@ -86,6 +87,9 @@ cdef class SGD:
     def start_decay(self):
         self.solver.startDecay()
 
+    def decay(self, Double multiplier=0.5):
+        self.solver.decay(multiplier)
+
     def iterate(self,
                 Double[:,::1] X not None,
                 Double[::1] y not None,
@@ -111,6 +115,7 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
         _MISO(size_t dim, size_t n, Double lmbda, string loss, bool computeLB)
         void startDecay()
+        void decay(Double mult)
         size_t t()
         size_t nfeatures()
         size_t nexamples()
@@ -148,6 +153,9 @@ cdef class MISO:
 
     def start_decay(self):
         self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        self.solver.decay(multiplier)
 
     def lower_bound(self):
         return self.solver.lowerBound()

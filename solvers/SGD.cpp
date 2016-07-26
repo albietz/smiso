@@ -19,4 +19,8 @@ void SGD::startDecay() {
   decay_ = true;
   t0_ = t_;
 }
+
+void SGD::decay(const double multiplier) {
+  lr_ *= multiplier;
+}
 }
