@@ -28,13 +28,9 @@ def read_matlab_ckn_model(filename):
         # TODO: do this for all fields
         # and don't fail when one of them is not an array
         l.b = l.b.flatten().astype(np.float32)
-        # l.W = l.W.T.astype(np.float32)
-        # l.W.shape = l.W.shape[0], -1
+        l.W = l.W.T.astype(np.float32)
+        l.W.shape = l.W.shape[0], -1
 
-        # correct dimensions
-        nmaps = l.W.shape[0] // (l.npatch * l.npatch)
-        l.W = l.W.astype(np.float32).reshape(nmaps, l.npatch, l.npatch, -1).transpose(3, 0, 1, 2)
-        l.W = l.W.reshape(l.W.shape[0], -1)
         l.W2 = l.W2.T.astype(np.float32)
         l.W2.shape = l.W2.shape[0], -1
         # print(l.Wfilt)
