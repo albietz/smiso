@@ -22,7 +22,7 @@ def unpickle_cifar(file):
         return pickle.load(fo, encoding='bytes')
 
 
-def read_dataset_cifar10(folder):
+def read_dataset_cifar10_raw(folder):
     """read the pickle files provided from 
     https://www.cs.toronto.edu/~kriz/cifar.html
     and returns all data in one numpy array for training and one for testing"""
@@ -47,12 +47,23 @@ def read_dataset_cifar10(folder):
     return Xtr, Ytr, Xte, Yte
 
 
+def read_dataset_cifar10_whitened(mat_file):
+    """read cifar dataset from matlab whitened file."""
+    from scipy.io import loadmat
+    mat = loadmat('data/cifar10white.mat')
+
+    def get_X(Xin):
+        return np.ascontiguousarray(Xin.astype(np.float32).reshape(32, 3, 32, -1).transpose(3, 0, 2, 1))
+
+    return get_X(mat['Xtr']), mat['Ytr'].ravel(), get_X(mat['Xte']), mat['Yte'].ravel()
+
+
 class Dataset(object):
-    def __init__(self, dataset_folder, augmentation=True, num_epochs=None,
+    def __init__(self, dataset, augmentation=True, num_epochs=None,
                  num_threads=10, capacity=256):
         self.num_epochs = num_epochs
-        self.train_data, self.train_labels, self.test_data, self.test_labels = \
-                read_dataset_cifar10(dataset_folder)
+        self.augmentation = augmentation
+        self.train_data, self.train_labels, self.test_data, self.test_labels = dataset
 
         self.train_features = None
         self.test_features = None
@@ -71,7 +82,7 @@ class Dataset(object):
         image, label, index = producer.random_slice_input_producer(
                 [self.input_images, self.input_labels, self.input_indexes],
                 num_epochs=self.num_epochs, seed=SEED)
-        if augmentation:
+        if self.augmentation:
             image = self.process_train_image(image)
 
         # switch back to (channels, h, w) for ckn encoding
@@ -92,7 +103,9 @@ class Dataset(object):
         '''Initialize feature vectors on validation/test data from a given model.'''
 
         def eval_in_batches(data):
-            return ckn.encode_cudnn(data.reshape(data.shape[0], 96, 32), layers, cuda_device, CKN_BATCH_SIZE)
+            N = data.shape[0]
+            X = data.transpose(0, 3, 1, 2).reshape(N, 96, 32)
+            return ckn.encode_cudnn(np.ascontiguousarray(X), layers, cuda_device, CKN_BATCH_SIZE)
 
         if init_train:
             self.train_features = eval_in_batches(self.train_data)
@@ -128,8 +141,11 @@ class DatasetIterator(object):
             image_data, labels, indexes = self.sess.run(
                     [self.ds.images, self.ds.labels, self.ds.indexes])
             epoch = float(step) * ENCODE_SIZE / n
-            X = self.encode(image_data)
-            yield (epoch, X, labels, indexes)
+            if self.ds.augmentation:
+                X = self.encode(image_data)
+                yield (epoch, X, labels, indexes)
+            else:
+                yield (epoch, None, None, indexes)
 
 
 if __name__ == '__main__':
@@ -142,12 +158,19 @@ if __name__ == '__main__':
     parser.add_argument('--dataset-folder',
       default="/home/clear/dwynen/ckn-dataset/cifar-10-batches-py/",
       help="Folder containing dataset files.")
+    parser.add_argument('--dataset-matfile',
+      default='data/cifar10white.mat',
+      help='matlab file containing whitened dataset')
     parser.add_argument('--layers-file',
-      default="/scratch/clear/abietti/results/ckn/cifar1/layers_1.npy",
+      # default="/scratch/clear/abietti/results/ckn/cifar1/layers_1.npy",
+      default="/scratch/clear/abietti/results/ckn/cifar10white/cifar_ckn_model0.npy",
       help="numpy model file containing matrices for all layers")
     parser.add_argument('--results-root',
       default='/scratch/clear/abietti/results/ckn_incr',
       help='Root folder for results. Will make a subfolder there based on $tag')
+    parser.add_argument('--encoded-ds-filename',
+      default=None,
+      help='store encoded dataset in this npy file')
     parser.add_argument('--cuda-device',
       default=0, type=int,
       help='CUDA GPU device number')
@@ -158,42 +181,88 @@ if __name__ == '__main__':
     layers = np.load(args.layers_file)
 
     with tf.device('/cpu:0'):
-        ds = Dataset(args.dataset_folder)
+        ds = Dataset(read_dataset_cifar10_whitened(args.dataset_matfile), augmentation=False)
     sess = tf.Session()  # prevent stream executor issue
-    ds.init_test_features(layers)
+    ds.init_test_features(layers, init_train=not ds.augmentation)
 
+    n_classes = 10
     target_label = 2
-    Xtest = ds.test_features.astype(np.float64)
-    ytest = (ds.test_labels == target_label).astype(np.float64)
+    Xtest = ds.test_features.astype(solvers.dtype)
+    ytest = ds.test_labels
+    if not ds.augmentation:
+        Xtrain = ds.train_features.astype(solvers.dtype)
+        Xtrain -= Xtrain.mean(1)[:,None]
+        Xtrain /= np.sqrt((Xtrain ** 2).sum(1))[:,None]
+        ytrain = []
+        for target in range(n_classes):
+            ytrain.append((ds.train_labels == target).astype(solvers.dtype))
+
+        Xtest -= Xtest.mean(1)[:,None]
+        Xtest /= np.sqrt((Xtest ** 2).sum(1))[:,None]
+
+        if args.encoded_ds_filename:
+            np.save(args.encoded_ds_filename, [{'Xtr': Xtrain, 'ytr': ds.train_labels, 'Xte': Xtest, 'yte': ds.test_labels}])
 
     dim = Xtest.shape[1]
     n = ds.train_data.shape[0]
 
     loss = algos.LogisticLoss()
-    lmbda = 0.001
-    solver_list = [
+    lmbda = 0.00001
+    solver_list = []
+    for _ in range(n_classes):
+        solver_list.append([
             solvers.SGD(dim, lr=0.1, lmbda=lmbda, loss=loss.name.encode('utf-8')),
             solvers.MISO(dim, n, lmbda=lmbda, loss=loss.name.encode('utf-8')),
-        ]
+        ])
+    n_algos = len(solver_list[0])
     engine = DatasetIterator(ds, layers)
     start_time = time.time()
-    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(5)):
-        X = Xdata.astype(np.float64)
-        y = (labels == target_label).astype(np.float64)
 
-        if step % 3 == 0:
-            for solver in solver_list:
-                solver.decay()
+    preds = []
+    preds_train = []
+    for _ in range(n_algos):
+        preds.append(np.zeros((n_classes, Xtest.shape[0])))
+        preds_train.append(np.zeros((n_classes, ENCODE_SIZE if ds.augmentation else n)))
 
-        losses = []
-        accuracies = []  # auc/ap?
-        for solver in solver_list:
-            solver.iterate(X, y, idxs)
-            preds = Xtest.dot(solver.w)
-            losses.append(loss.compute(preds, ytest).mean())
+    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(20)):
+        t0 = time.time()
+        if ds.augmentation:
+            X = Xdata.astype(solvers.dtype)
+        else:
+            X = Xtrain
+            labels = ds.train_labels
+        losses = n_algos * [0.]
+        times = n_algos * [0.]
+        for target in range(n_classes):
+            if ds.augmentation:
+                y = solvers.dtype(labels == target)
+            else:
+                y = ytrain[target]
 
-        print('epoch', e, 'test losses', losses)
+            if step % 5 == 0:
+                for solver in solver_list[target]:
+                    pass  # solver.decay(0.5)
+
+            for alg, solver in enumerate(solver_list[target]):
+                t1 = time.time()
+                if ds.augmentation:
+                    solver.iterate(X, y, idxs)
+                else:
+                    solver.iterate_indexed(X, y, idxs)
+                times[alg] += time.time() - t1
+                preds_train[alg][target] = X.dot(solver.w)
+                preds[alg][target] = Xtest.dot(solver.w)
+                losses[alg] += loss.compute(preds[alg], solvers.dtype(ytest == target)).mean()
+
+        acc_train = []
+        acc_test = []
+        for alg in range(n_algos):
+            # if step % 5 == 0:
+            acc_train.append((preds_train[alg].argmax(axis=0) == labels).mean())
+            acc_test.append((preds[alg].argmax(axis=0) == ytest).mean())
+
+        print('epoch', e, 'test losses', losses, 'train batch acc', acc_train, 'test acc', acc_test)
         t = time.time()
-        print('elapsed time:', t - start_time)
+        print('elapsed time:', t - start_time, 'training/evaluation elapsed time:', t - t0, 'iterate times:', times)
         start_time = t
 

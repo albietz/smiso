@@ -2,7 +2,7 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
-USE_FLOAT = 0  # use float (1) or double (0)
+USE_FLOAT = 1  # use float (1) or double (0)
 
 setup(
     name = 'solvers',

@@ -1,0 +1,4 @@
+LIBCKN {
+    global: miso_one_vs_rest;
+    local: *;
+};
