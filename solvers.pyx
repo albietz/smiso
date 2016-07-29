@@ -5,7 +5,7 @@ cimport numpy as np
 
 from cpython.ref cimport PyObject, Py_INCREF
 from cython.operator cimport dereference as deref
-from libc.stdint cimport int64_t
+from libc.stdint cimport int32_t, int64_t
 from libcpp.string cimport string
 from libcpp cimport bool
 
@@ -24,19 +24,44 @@ ELSE:
 cdef extern from "numpy/arrayobject.h":
     void PyArray_SetBaseObject(np.ndarray, PyObject*)
 
-cdef extern from "solvers/Solver.h" namespace "solvers":
-    void iterateBlock[SolverT](SolverT& solver,
-                               const size_t blockSize,
-                               const Double* const XData,
-                               const Double* const yData,
-                               const int64_t* const idxData) nogil
+cdef extern from "solvers/common.h" namespace "solvers":
+    void _center "solvers::center"(
+        Double* const XData, const size_t rows, const size_t cols)
+    void _normalize "solvers::normalize"(
+        Double* const XData, const size_t rows, const size_t cols)
 
-    void iterateBlockIndexed[SolverT](SolverT& solver,
-                                      const size_t dataSize,
-                                      const Double* const XData,
-                                      const Double* const yData,
-                                      const size_t blockSize,
-                                      const int64_t* const idxData) nogil
+def center(Double[:,::1] X not None):
+    _center(&X[0,0], X.shape[0], X.shape[1])
+
+def normalize(Double[:,::1] X not None):
+    _normalize(&X[0,0], X.shape[0], X.shape[1])
+
+cdef extern from "solvers/Solver.h" namespace "solvers":
+    void iterateBlock "solvers::Solver::iterateBlock"[SolverT](
+            SolverT& solver,
+            const size_t blockSize,
+            const Double* const XData,
+            const Double* const yData,
+            const int64_t* const idxData) nogil
+
+    void iterateBlockIndexed "solvers::Solver::iterateBlockIndexed"[SolverT](
+            SolverT& solver,
+            const size_t dataSize,
+            const Double* const XData,
+            const Double* const yData,
+            const size_t blockSize,
+            const int64_t* const idxData) nogil
+
+    cdef cppclass OneVsRest[SolverT]:
+        OneVsRest(size_t nclasses, ...)
+        size_t nclasses()
+        void startDecay()
+        void decay(Double mult)
+        void iterateBlock(...)
+        void iterateBlockIndexed(...)
+        void predict(const size_t sz,
+                     int32_t* const out,
+                     const Double* const XData)
 
 cdef extern from "solvers/Loss.h" namespace "solvers":
     void setGradSigma "solvers::Loss::setGradSigma"(
@@ -111,6 +136,42 @@ cdef class SGD:
                                   idx.shape[0],
                                   &idx[0])
 
+cdef class SGDOneVsRest:
+    cdef OneVsRest[_SGD]* solver
+
+    def __cinit__(self, size_t nclasses, size_t dim, Double lr=0.1,
+                  Double lmbda=0., string loss="logistic"):
+        self.solver = new OneVsRest[_SGD](nclasses, dim, lr, lmbda, loss)
+
+    def __dealloc__(self):
+        del self.solver
+
+    def start_decay(self):
+        self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        self.solver.decay(multiplier)
+
+    def iterate(self,
+                Double[:,::1] X not None,
+                int32_t[::1] y not None,
+                int64_t[::1] idx not None):
+        self.solver.iterateBlock(X.shape[0], &X[0,0], &y[0], &idx[0])
+
+    def iterate_indexed(self,
+                        Double[:,::1] X not None,
+                        int32_t[::1] y not None,
+                        int64_t[::1] idx not None):
+        self.solver.iterateBlockIndexed(
+                X.shape[0], &X[0,0], &y[0], idx.shape[0], &idx[0])
+
+    def predict(self, Double[:,::1] X not None):
+        preds = np.empty(X.shape[0], dtype=np.int32)
+        cdef int32_t[:] out = preds
+        self.solver.predict(out.shape[0], &out[0], &X[0,0])
+        return preds
+
+
 cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
         _MISO(size_t dim, size_t n, Double lmbda, string loss, bool computeLB)
@@ -180,3 +241,39 @@ cdef class MISO:
                                    &y[0],
                                    idx.shape[0],
                                    &idx[0])
+
+
+cdef class MISOOneVsRest:
+    cdef OneVsRest[_MISO]* solver
+
+    def __cinit__(self, size_t nclasses, size_t dim, size_t n,
+                  Double lmbda=0.1, string loss="logistic", bool compute_lb=False):
+        self.solver = new OneVsRest[_MISO](nclasses, dim, n, lmbda, loss, compute_lb)
+
+    def __dealloc__(self):
+        del self.solver
+
+    def start_decay(self):
+        self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        self.solver.decay(multiplier)
+
+    def iterate(self,
+                Double[:,::1] X not None,
+                int32_t[::1] y not None,
+                int64_t[::1] idx not None):
+        self.solver.iterateBlock(X.shape[0], &X[0,0], &y[0], &idx[0])
+
+    def iterate_indexed(self,
+                        Double[:,::1] X not None,
+                        int32_t[::1] y not None,
+                        int64_t[::1] idx not None):
+        self.solver.iterateBlockIndexed(
+                X.shape[0], &X[0,0], &y[0], idx.shape[0], &idx[0])
+
+    def predict(self, Double[:,::1] X not None):
+        preds = np.empty(X.shape[0], dtype=np.int32)
+        cdef int32_t[:] out = preds
+        self.solver.predict(out.shape[0], &out[0], &X[0,0])
+        return preds

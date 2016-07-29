@@ -27,7 +27,7 @@ void MISO::startDecay() {
   t0_ = t_;
 }
 
-void MISO::decay(const double multiplier) {
+void MISO::decay(const Double multiplier) {
   alpha_ *= multiplier;
 }
 

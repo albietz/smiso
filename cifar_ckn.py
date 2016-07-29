@@ -14,7 +14,7 @@ from ckn import _ckn_cuda as ckn
 
 cuda_device = 0
 SEED = None
-ENCODE_SIZE = 10000
+ENCODE_SIZE = 50000
 CKN_BATCH_SIZE = 256
 
 def unpickle_cifar(file):
@@ -55,7 +55,7 @@ def read_dataset_cifar10_whitened(mat_file):
     def get_X(Xin):
         return np.ascontiguousarray(Xin.astype(np.float32).reshape(32, 3, 32, -1).transpose(3, 0, 2, 1))
 
-    return get_X(mat['Xtr']), mat['Ytr'].ravel(), get_X(mat['Xte']), mat['Yte'].ravel()
+    return get_X(mat['Xtr']), mat['Ytr'].ravel().astype(np.int32), get_X(mat['Xte']), mat['Yte'].ravel()
 
 
 class Dataset(object):
@@ -142,6 +142,7 @@ class DatasetIterator(object):
                     [self.ds.images, self.ds.labels, self.ds.indexes])
             epoch = float(step) * ENCODE_SIZE / n
             if self.ds.augmentation:
+                print('augm:', self.ds.augmentation)
                 X = self.encode(image_data)
                 yield (epoch, X, labels, indexes)
             else:
@@ -171,34 +172,50 @@ if __name__ == '__main__':
     parser.add_argument('--encoded-ds-filename',
       default=None,
       help='store encoded dataset in this npy file')
+    parser.add_argument('--augmentation',
+      default=True,
+      action='store_true',
+      help='whether to enable data augmentation')
+    parser.add_argument('--no-augmentation',
+      dest='augmentation',
+      action='store_false',
+      help='whether to disable data augmentation')
+    parser.add_argument('--normalize',
+      default=True,
+      action='store_true',
+      help='whether to center and L2 normalize each training example')
+    parser.add_argument('--no-normalize',
+      action='store_false',
+      help='do not normalize')
     parser.add_argument('--cuda-device',
       default=0, type=int,
       help='CUDA GPU device number')
 
     args = parser.parse_args()
+    print('augmentation:', args.augmentation, 'normalize:', args.normalize)
 
     cuda_device = args.cuda_device
     layers = np.load(args.layers_file)
 
     with tf.device('/cpu:0'):
-        ds = Dataset(read_dataset_cifar10_whitened(args.dataset_matfile), augmentation=False)
-    sess = tf.Session()  # prevent stream executor issue
+        ds = Dataset(read_dataset_cifar10_whitened(args.dataset_matfile),
+                     augmentation=args.augmentation)
+    # leave here to avoid stream executor issues by creating session
+    engine = DatasetIterator(ds, layers)
     ds.init_test_features(layers, init_train=not ds.augmentation)
 
     n_classes = 10
-    target_label = 2
     Xtest = ds.test_features.astype(solvers.dtype)
+    if args.normalize:
+        solvers.center(Xtest)
+        solvers.normalize(Xtest)
     ytest = ds.test_labels
     if not ds.augmentation:
         Xtrain = ds.train_features.astype(solvers.dtype)
-        Xtrain -= Xtrain.mean(1)[:,None]
-        Xtrain /= np.sqrt((Xtrain ** 2).sum(1))[:,None]
-        ytrain = []
-        for target in range(n_classes):
-            ytrain.append((ds.train_labels == target).astype(solvers.dtype))
-
-        Xtest -= Xtest.mean(1)[:,None]
-        Xtest /= np.sqrt((Xtest ** 2).sum(1))[:,None]
+        if args.normalize:
+            solvers.center(Xtrain)
+            solvers.normalize(Xtrain)
+        ytrain = ds.train_labels
 
         if args.encoded_ds_filename:
             np.save(args.encoded_ds_filename, [{'Xtr': Xtrain, 'ytr': ds.train_labels, 'Xte': Xtest, 'yte': ds.test_labels}])
@@ -207,62 +224,48 @@ if __name__ == '__main__':
     n = ds.train_data.shape[0]
 
     loss = algos.LogisticLoss()
-    lmbda = 0.00001
-    solver_list = []
-    for _ in range(n_classes):
-        solver_list.append([
-            solvers.SGD(dim, lr=0.1, lmbda=lmbda, loss=loss.name.encode('utf-8')),
-            solvers.MISO(dim, n, lmbda=lmbda, loss=loss.name.encode('utf-8')),
-        ])
-    n_algos = len(solver_list[0])
-    engine = DatasetIterator(ds, layers)
-    start_time = time.time()
+    lmbda = 1e-7
+    solver_list = [
+        solvers.SGDOneVsRest(n_classes, dim, lr=0.1, lmbda=lmbda, loss=loss.name.encode('utf-8')),
+        solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss.name.encode('utf-8')),
+    ]
+    # adjust miso step-size if needed (with L == 1)
+    solver_list[1].decay(min(1, lmbda * n / (1 - lmbda)))
 
-    preds = []
-    preds_train = []
-    for _ in range(n_algos):
-        preds.append(np.zeros((n_classes, Xtest.shape[0])))
-        preds_train.append(np.zeros((n_classes, ENCODE_SIZE if ds.augmentation else n)))
+    n_algos = len(solver_list)
+    start_time = time.time()
 
     for step, (e, Xdata, labels, idxs) in enumerate(engine.run(20)):
         t0 = time.time()
         if ds.augmentation:
             X = Xdata.astype(solvers.dtype)
+            y = labels
+            if args.normalize:
+                solvers.center(X)
+                solvers.normalize(X)
         else:
             X = Xtrain
-            labels = ds.train_labels
-        losses = n_algos * [0.]
-        times = n_algos * [0.]
-        for target in range(n_classes):
-            if ds.augmentation:
-                y = solvers.dtype(labels == target)
-            else:
-                y = ytrain[target]
-
-            if step % 5 == 0:
-                for solver in solver_list[target]:
-                    pass  # solver.decay(0.5)
-
-            for alg, solver in enumerate(solver_list[target]):
-                t1 = time.time()
-                if ds.augmentation:
-                    solver.iterate(X, y, idxs)
-                else:
-                    solver.iterate_indexed(X, y, idxs)
-                times[alg] += time.time() - t1
-                preds_train[alg][target] = X.dot(solver.w)
-                preds[alg][target] = Xtest.dot(solver.w)
-                losses[alg] += loss.compute(preds[alg], solvers.dtype(ytest == target)).mean()
-
+            y = ytrain
+        times = []
         acc_train = []
         acc_test = []
-        for alg in range(n_algos):
-            # if step % 5 == 0:
-            acc_train.append((preds_train[alg].argmax(axis=0) == labels).mean())
-            acc_test.append((preds[alg].argmax(axis=0) == ytest).mean())
+        for alg, solver in enumerate(solver_list):
+            if step % 5 == 0:
+                pass  # solver.decay(0.5)
 
-        print('epoch', e, 'test losses', losses, 'train batch acc', acc_train, 'test acc', acc_test)
+            t1 = time.time()
+            if ds.augmentation:
+                solver.iterate(X, y, idxs)
+            else:
+                solver.iterate_indexed(X, y, idxs)
+            times.append(time.time() - t1)
+            acc_train.append((solver.predict(X) == y).mean())
+            acc_test.append((solver.predict(Xtest) == ytest).mean())
+
+        print('epoch', e, 'train batch acc', acc_train, 'test acc', acc_test)
         t = time.time()
-        print('elapsed time:', t - start_time, 'training/evaluation elapsed time:', t - t0, 'iterate times:', times)
+        print('elapsed time:', t - start_time,
+              'training/evaluation elapsed time:', t - t0,
+              'iterate times:', times)
         start_time = t
 

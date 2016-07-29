@@ -19,7 +19,7 @@ class MISO : public Solver {
 
   void startDecay();
 
-  void decay(const double multiplier = 0.5);
+  void decay(const Double multiplier = 0.5);
 
   size_t nexamples() const {
     return n_;
