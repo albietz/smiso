@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import pickle
+import sys
 import time
 import numpy as np
 import tensorflow as tf
@@ -142,7 +143,6 @@ class DatasetIterator(object):
                     [self.ds.images, self.ds.labels, self.ds.indexes])
             epoch = float(step) * ENCODE_SIZE / n
             if self.ds.augmentation:
-                print('augm:', self.ds.augmentation)
                 X = self.encode(image_data)
                 yield (epoch, X, labels, indexes)
             else:
@@ -224,13 +224,18 @@ if __name__ == '__main__':
     n = ds.train_data.shape[0]
 
     loss = algos.LogisticLoss()
-    lmbda = 1e-7
+    lmbda = 6e-8
     solver_list = [
-        solvers.SGDOneVsRest(n_classes, dim, lr=0.1, lmbda=lmbda, loss=loss.name.encode('utf-8')),
         solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss.name.encode('utf-8')),
     ]
     # adjust miso step-size if needed (with L == 1)
-    solver_list[1].decay(min(1, lmbda * n / (1 - lmbda)))
+    solver_list[0].decay(min(1, lmbda * n / (1 - lmbda)))
+
+    lrs = [1.0, 1.6]
+    print('lrs:', lrs)
+    for lr in lrs:
+        solver_list.append(solvers.SGDOneVsRest(
+                n_classes, dim, lr=lr, lmbda=lmbda, loss=loss.name.encode('utf-8')))
 
     n_algos = len(solver_list)
     start_time = time.time()
@@ -262,10 +267,13 @@ if __name__ == '__main__':
             acc_train.append((solver.predict(X) == y).mean())
             acc_test.append((solver.predict(Xtest) == ytest).mean())
 
-        print('epoch', e, 'train batch acc', acc_train, 'test acc', acc_test)
+        print('epoch', e)
+        print('train batch acc', acc_train)
+        print('test acc', acc_test)
         t = time.time()
         print('elapsed time:', t - start_time,
               'training/evaluation elapsed time:', t - t0,
               'iterate times:', times)
         start_time = t
+        sys.stdout.flush()
 
