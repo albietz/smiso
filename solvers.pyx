@@ -62,6 +62,9 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
         void predict(const size_t sz,
                      int32_t* const out,
                      const Double* const XData)
+        Double computeLoss(const size_t sz,
+                           const Double* const XData,
+                           const int32_t* const yData)
 
 cdef extern from "solvers/Loss.h" namespace "solvers":
     void setGradSigma "solvers::Loss::setGradSigma"(
@@ -171,6 +174,9 @@ cdef class SGDOneVsRest:
         self.solver.predict(out.shape[0], &out[0], &X[0,0])
         return preds
 
+    def compute_loss(self, Double[:,::1] X not None, int32_t[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
 
 cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
@@ -277,3 +283,6 @@ cdef class MISOOneVsRest:
         cdef int32_t[:] out = preds
         self.solver.predict(out.shape[0], &out[0], &X[0,0])
         return preds
+
+    def compute_loss(self, Double[:,::1] X not None, int32_t[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])

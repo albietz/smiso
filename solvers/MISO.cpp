@@ -25,6 +25,7 @@ MISO::MISO(const size_t nfeatures,
 void MISO::startDecay() {
   decay_ = true;
   t0_ = t_;
+  gamma_ = static_cast<size_t>(2 * static_cast<Double>(n_) / alpha_) + 1;
 }
 
 void MISO::decay(const Double multiplier) {

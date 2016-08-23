@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "common.h"
+#include "Loss.h"
 
 namespace solvers {
 
@@ -27,6 +28,10 @@ class Solver {
 
   size_t nfeatures() const {
     return nfeatures_;
+  }
+
+  const std::string& loss() const {
+    return loss_;
   }
 
   const Vector& w() const {
@@ -159,6 +164,30 @@ class OneVsRest {
         }
       }
     }
+  }
+
+  Double computeLoss(const size_t dataSize,
+                     const Double* const XData,
+                     const int32_t* const yData) const {
+    Matrix preds(nclasses_, dataSize);
+#pragma omp parallel for
+    for (size_t c = 0; c < nclasses_; ++c) {
+      solvers_[c].predict(dataSize, preds.row(c).data(), XData);
+    }
+
+    Double loss = 0;
+#pragma omp parallel for reduction(+:loss)
+    for (size_t i = 0; i < dataSize; ++i) {
+      Double l = 0;
+      for (size_t c = 0; c < nclasses_; ++c) {
+        l += Loss::computeLoss(solvers_[0].loss(),
+                               preds(c, i),
+                               static_cast<Double>(yData[i] == static_cast<int32_t>(c)));
+      }
+      loss += l;
+    }
+
+    return loss / dataSize;
   }
 
  private:

@@ -34,24 +34,24 @@ class MISO : public Solver {
                const Double y,
                const size_t idx) {
     const Double stepSize = decay_ ?
-      std::min<Double>(alpha_, 2 * static_cast<Double>(n_) / (t_ - t0_ + n_)) : alpha_;
+      std::min<Double>(alpha_, 2 * static_cast<Double>(n_) / (t_ - t0_ + gamma_)) : alpha_;
 
     const Double pred = x * w_;
 
-    const auto grad = Loss::computeGradient(loss_, x, pred, y);
+    grad_ = Loss::computeGradient(loss_, x, pred, y);
 
     const auto ziOld = z_.row(idx).transpose();
 
-    const Vector zi = (1 - stepSize) * ziOld - stepSize / lambda_ * grad;
+    zi_ = (1 - stepSize) * ziOld - stepSize / lambda_ * grad_;
 
     if (computeLB_) {
       c_[idx] = (1 - stepSize) * c_[idx] +
-        stepSize * (Loss::computeLoss(loss_, pred, y) - grad.dot(w_));
+        stepSize * (Loss::computeLoss(loss_, pred, y) - grad_.dot(w_));
     }
 
-    w_ = w_ + 1.0 / n_ * (zi - ziOld);
+    w_ = w_ + 1.0 / n_ * (zi_ - ziOld);
 
-    z_.row(idx) = zi.transpose();
+    z_.row(idx) = zi_.transpose();
 
     ++t_;
   }
@@ -73,8 +73,14 @@ class MISO : public Solver {
 
   size_t t0_;
 
+  size_t gamma_; // offset for decaying stepsize C / (gamma + t - t0)
+
   bool computeLB_; // whether to compute lower bounds
 
   Vector c_; // for computing lower bounds
+
+  Vector grad_;
+
+  Vector zi_;
 };
 }

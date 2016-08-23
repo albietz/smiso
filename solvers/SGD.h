@@ -28,12 +28,12 @@ class SGD : public Solver {
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
                const Double y,
                const size_t idx) {
-    const Double stepSize = decay_ ? lr_ / (t_ - t0_ + 1) : lr_;
+    const Double stepSize = decay_ ? 2.0 / (lambda_ * (t_ - t0_ + gamma_)) : lr_;
 
-    const auto grad = Loss::computeGradient(loss_, x, x * w_, y);
+    grad_ = Loss::computeGradient(loss_, x, x * w_, y);
 
     // SGD update
-    w_ = w_ - stepSize * (grad + lambda_ * w_);
+    w_ = w_ - stepSize * (grad_ + lambda_ * w_);
 
     ++t_;
   }
@@ -48,5 +48,9 @@ class SGD : public Solver {
   size_t t_; // iteration
 
   size_t t0_;
+
+  size_t gamma_;
+
+  Vector grad_;
 };
 }

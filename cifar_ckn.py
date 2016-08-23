@@ -56,7 +56,7 @@ def read_dataset_cifar10_whitened(mat_file):
     def get_X(Xin):
         return np.ascontiguousarray(Xin.astype(np.float32).reshape(32, 3, 32, -1).transpose(3, 0, 2, 1))
 
-    return get_X(mat['Xtr']), mat['Ytr'].ravel().astype(np.int32), get_X(mat['Xte']), mat['Yte'].ravel()
+    return get_X(mat['Xtr']), mat['Ytr'].ravel().astype(np.int32), get_X(mat['Xte']), mat['Yte'].ravel().astype(np.int32)
 
 
 class Dataset(object):
@@ -129,7 +129,8 @@ class DatasetIterator(object):
         self.layers = layers
         self.sess = tf.Session()
         self.ds.init(self.sess)
-        tf.train.start_queue_runners(sess=self.sess)
+        if self.ds.augmentation:
+            tf.train.start_queue_runners(sess=self.sess)
 
     def encode(self, image_data):
         return ckn.encode_cudnn(
@@ -139,13 +140,14 @@ class DatasetIterator(object):
     def run(self, num_epochs):
         n = self.ds.train_data.shape[0]        
         for step in range(n * num_epochs // ENCODE_SIZE):
-            image_data, labels, indexes = self.sess.run(
-                    [self.ds.images, self.ds.labels, self.ds.indexes])
             epoch = float(step) * ENCODE_SIZE / n
             if self.ds.augmentation:
+                image_data, labels, indexes = self.sess.run(
+                        [self.ds.images, self.ds.labels, self.ds.indexes])
                 X = self.encode(image_data)
                 yield (epoch, X, labels, indexes)
             else:
+                indexes = np.random.randint(n, size=ENCODE_SIZE)
                 yield (epoch, None, None, indexes)
 
 
@@ -167,8 +169,11 @@ if __name__ == '__main__':
       default="/scratch/clear/abietti/results/ckn/cifar10white/cifar_ckn_model0.npy",
       help="numpy model file containing matrices for all layers")
     parser.add_argument('--results-root',
-      default='/scratch/clear/abietti/results/ckn_incr',
-      help='Root folder for results. Will make a subfolder there based on $tag')
+      default='/scratch/clear/abietti/results/ckn/cifar10white/accs',
+      help='Root folder for result files.')
+    parser.add_argument('--results-file',
+      default='tmp.pkl',
+      help='Filename of results pickle file.')
     parser.add_argument('--encoded-ds-filename',
       default=None,
       help='store encoded dataset in this npy file')
@@ -185,14 +190,27 @@ if __name__ == '__main__':
       action='store_true',
       help='whether to center and L2 normalize each training example')
     parser.add_argument('--no-normalize',
+      dest='normalize',
       action='store_false',
       help='do not normalize')
     parser.add_argument('--cuda-device',
       default=0, type=int,
       help='CUDA GPU device number')
+    parser.add_argument('--start-decay-step',
+      default=20, type=int,
+      help='step at which to start decaying the stepsize')
+    parser.add_argument('--no-decay',
+      default=False,
+      action='store_true',
+      help='whether to start decaying the stepsize at step specified at start-decay-step')
+    parser.add_argument('--compute-loss',
+      default=False,
+      action='store_true',
+      help='whether to compute train/test losses')
 
     args = parser.parse_args()
-    print('augmentation:', args.augmentation, 'normalize:', args.normalize)
+    print('augmentation:', args.augmentation, 'normalize:', args.normalize,
+          'no-decay:', args.no_decay)
 
     cuda_device = args.cuda_device
     layers = np.load(args.layers_file)
@@ -202,7 +220,8 @@ if __name__ == '__main__':
                      augmentation=args.augmentation)
     # leave here to avoid stream executor issues by creating session
     engine = DatasetIterator(ds, layers)
-    ds.init_test_features(layers, init_train=not ds.augmentation)
+    init_train = args.compute_loss or not ds.augmentation
+    ds.init_test_features(layers, init_train=init_train)
 
     n_classes = 10
     Xtest = ds.test_features.astype(solvers.dtype)
@@ -210,7 +229,7 @@ if __name__ == '__main__':
         solvers.center(Xtest)
         solvers.normalize(Xtest)
     ytest = ds.test_labels
-    if not ds.augmentation:
+    if init_train:
         Xtrain = ds.train_features.astype(solvers.dtype)
         if args.normalize:
             solvers.center(Xtrain)
@@ -225,22 +244,28 @@ if __name__ == '__main__':
 
     loss = algos.LogisticLoss()
     lmbda = 6e-8
+    # lmbda = 0.001
     solver_list = [
         solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss.name.encode('utf-8')),
     ]
+    solver_params = [dict(name='miso_onevsrest', lmbda=lmbda, loss=loss.name)]
     # adjust miso step-size if needed (with L == 1)
     solver_list[0].decay(min(1, lmbda * n / (1 - lmbda)))
 
-    lrs = [1.0, 1.6]
+    lrs = [0.1, 0.3, 1.0, 3.0]
     print('lrs:', lrs)
     for lr in lrs:
         solver_list.append(solvers.SGDOneVsRest(
                 n_classes, dim, lr=lr, lmbda=lmbda, loss=loss.name.encode('utf-8')))
+        solver_params.append(dict(name='sgd_onevsrest', lr=lr, lmbda=lmbda, loss=loss.name))
 
     n_algos = len(solver_list)
     start_time = time.time()
 
-    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(20)):
+    test_accs = []
+    train_losses = []
+    test_losses = []
+    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(200)):
         t0 = time.time()
         if ds.augmentation:
             X = Xdata.astype(solvers.dtype)
@@ -254,9 +279,12 @@ if __name__ == '__main__':
         times = []
         acc_train = []
         acc_test = []
+        loss_train = []
+        loss_test = []
         for alg, solver in enumerate(solver_list):
-            if step % 5 == 0:
-                pass  # solver.decay(0.5)
+            if not args.no_decay and step == args.start_decay_step:
+                print('starting stepsize decay')
+                solver.start_decay()
 
             t1 = time.time()
             if ds.augmentation:
@@ -266,14 +294,27 @@ if __name__ == '__main__':
             times.append(time.time() - t1)
             acc_train.append((solver.predict(X) == y).mean())
             acc_test.append((solver.predict(Xtest) == ytest).mean())
+            if args.compute_loss:
+                loss_train.append(solver.compute_loss(Xtrain, ytrain))
+                loss_test.append(solver.compute_loss(Xtest, ytest))
 
         print('epoch', e)
         print('train batch acc', acc_train)
         print('test acc', acc_test)
+        print('train loss', loss_train)
+        print('test loss', loss_test)
         t = time.time()
         print('elapsed time:', t - start_time,
               'training/evaluation elapsed time:', t - t0,
               'iterate times:', times)
         start_time = t
+        test_accs.append(acc_test)
+        if args.compute_loss:
+            train_losses.append(loss_train)
+            test_losses.append(loss_test)
         sys.stdout.flush()
+
+    pickle.dump({'params': solver_params, 'test_accs': test_accs,
+                 'train_losses': train_losses, 'test_losses': test_losses},
+                open(os.path.join(args.results_root, args.results_file), 'wb'))
 

@@ -18,6 +18,7 @@ SGD::SGD(const size_t nfeatures,
 void SGD::startDecay() {
   decay_ = true;
   t0_ = t_;
+  gamma_ = static_cast<size_t>(2.0 / (lambda_ * lr_)) + 1;
 }
 
 void SGD::decay(const double multiplier) {
