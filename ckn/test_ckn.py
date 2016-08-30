@@ -129,7 +129,7 @@ def train_ckn(inputs, layers, outfolder, cuda_device):
       print('training layer {}'.format(idx_layer))
       layer = layers[idx_layer]
 
-      X = make_training_set(inputs, layers[:idx_layer], layer['npatch'], cuda_device, 100000)
+      X = make_training_set(inputs, layers[:idx_layer], layer['npatch'], cuda_device, 1000000)
 
       if 'sigma' not in layer:
         print('Given quantile {}, compute sigma... '

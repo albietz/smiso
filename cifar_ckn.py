@@ -51,7 +51,7 @@ def read_dataset_cifar10_raw(folder):
 def read_dataset_cifar10_whitened(mat_file):
     """read cifar dataset from matlab whitened file."""
     from scipy.io import loadmat
-    mat = loadmat('data/cifar10white.mat')
+    mat = loadmat(mat_file)
 
     def get_X(Xin):
         return np.ascontiguousarray(Xin.astype(np.float32).reshape(32, 3, 32, -1).transpose(3, 0, 2, 1))
@@ -59,9 +59,16 @@ def read_dataset_cifar10_whitened(mat_file):
     return get_X(mat['Xtr']), mat['Ytr'].ravel().astype(np.int32), get_X(mat['Xte']), mat['Yte'].ravel().astype(np.int32)
 
 
+def load_cifar_pickle(pickled_file):
+    X, y, Xt, yt = pickle.load(open(pickled_file, 'rb'))
+    def getX(X):
+        return np.ascontiguousarray(X.transpose(0, 3, 2, 1).astype(np.float32))
+    return getX(X), y.astype(np.int32), getX(Xt), yt.astype(np.int32)
+
+
 class Dataset(object):
     def __init__(self, dataset, augmentation=True, num_epochs=None,
-                 num_threads=10, capacity=256):
+                 num_threads=4, capacity=10000):
         self.num_epochs = num_epochs
         self.augmentation = augmentation
         self.train_data, self.train_labels, self.test_data, self.test_labels = dataset
@@ -216,6 +223,7 @@ if __name__ == '__main__':
     layers = np.load(args.layers_file)
 
     with tf.device('/cpu:0'):
+        # ds = Dataset(load_cifar_pickle('/scratch/clear/abietti/data/cifar10_data/whitened.pkl'),
         ds = Dataset(read_dataset_cifar10_whitened(args.dataset_matfile),
                      augmentation=args.augmentation)
     # leave here to avoid stream executor issues by creating session
@@ -265,7 +273,7 @@ if __name__ == '__main__':
     test_accs = []
     train_losses = []
     test_losses = []
-    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(200)):
+    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(500)):
         t0 = time.time()
         if ds.augmentation:
             X = Xdata.astype(solvers.dtype)
@@ -283,8 +291,10 @@ if __name__ == '__main__':
         loss_test = []
         for alg, solver in enumerate(solver_list):
             if not args.no_decay and step == args.start_decay_step:
-                print('starting stepsize decay')
-                solver.start_decay()
+                # print('starting stepsize decay')
+                # solver.start_decay()
+                print('decaying stepsize')
+                solver.decay(0.5)
 
             t1 = time.time()
             if ds.augmentation:
