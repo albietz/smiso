@@ -10,7 +10,10 @@ import tensorflow as tf
 import algos
 import producer
 import solvers
-from ckn import _ckn_cuda as ckn
+from ckn_encode_queue import CKNEncoder
+
+sys.path.append('/home/thoth/abietti/ckn_python/')
+import _ckn_cuda as ckn
 
 
 cuda_device = 0
@@ -54,16 +57,30 @@ def read_dataset_cifar10_whitened(mat_file):
     mat = loadmat(mat_file)
 
     def get_X(Xin):
+        # HCWN -> NHWC
         return np.ascontiguousarray(Xin.astype(np.float32).reshape(32, 3, 32, -1).transpose(3, 0, 2, 1))
 
-    return get_X(mat['Xtr']), mat['Ytr'].ravel().astype(np.int32), get_X(mat['Xte']), mat['Yte'].ravel().astype(np.int32)
+    return (get_X(mat['Xtr']), mat['Ytr'].ravel().astype(np.int32),
+            get_X(mat['Xte']), mat['Yte'].ravel().astype(np.int32))
 
 
 def load_cifar_pickle(pickled_file):
     X, y, Xt, yt = pickle.load(open(pickled_file, 'rb'))
     def getX(X):
-        return np.ascontiguousarray(X.transpose(0, 3, 2, 1).astype(np.float32))
+        # already NHWC
+        return np.ascontiguousarray(X.astype(np.float32))
     return getX(X), y.astype(np.int32), getX(Xt), yt.astype(np.int32)
+
+
+def load_mnist():
+    from infimnist import _infimnist as imnist
+    mnist = imnist.InfimnistGenerator()
+    digits_train, labels_train = mnist.gen(np.arange(10000, 70000))  # training digits
+    digits_test, labels_test = mnist.gen(np.arange(10000))  # test digits
+    def getX(digits):
+        return digits.reshape(-1, 28, 28, 1).astype(np.float32)
+    return (getX(digits_train), labels_train.astype(np.int32),
+            getX(digits_test), labels_test.astype(np.int32))
 
 
 class Dataset(object):
@@ -111,8 +128,8 @@ class Dataset(object):
         '''Initialize feature vectors on validation/test data from a given model.'''
 
         def eval_in_batches(data):
-            N = data.shape[0]
-            X = data.transpose(0, 3, 1, 2).reshape(N, 96, 32)
+            N, H, W, C = data.shape
+            X = data.transpose(0, 3, 1, 2).reshape(N, C*H, W)
             return ckn.encode_cudnn(np.ascontiguousarray(X), layers, cuda_device, CKN_BATCH_SIZE)
 
         if init_train:
@@ -160,7 +177,7 @@ class DatasetIterator(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-      description="Trains a network and encodes the dataset with it.")
+      description="Runs solvers with data-augmentation.")
 
     parser.add_argument('--network',
       default='network.json',
@@ -171,9 +188,14 @@ if __name__ == '__main__':
     parser.add_argument('--dataset-matfile',
       default='data/cifar10white.mat',
       help='matlab file containing whitened dataset')
+    parser.add_argument('--dataset-file',
+      default='/scratch/clear/abietti/data/cifar10_data/whitened.pkl',
+      help='pickle file containing (whitened) dataset')
     parser.add_argument('--layers-file',
       # default="/scratch/clear/abietti/results/ckn/cifar1/layers_1.npy",
-      default="/scratch/clear/abietti/results/ckn/cifar10white/cifar_ckn_model0.npy",
+      # default="/scratch/clear/abietti/results/ckn/cifar10white/cifar_ckn_model0.npy",
+      default="/scratch/clear/abietti/results/ckn/cifar10white_py/layers_1.npy",
+      # default="/scratch/clear/abietti/results/ckn/mnist_py/layers_1.npy",
       help="numpy model file containing matrices for all layers")
     parser.add_argument('--results-root',
       default='/scratch/clear/abietti/results/ckn/cifar10white/accs',
