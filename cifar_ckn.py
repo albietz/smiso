@@ -85,7 +85,7 @@ def load_mnist():
 
 class Dataset(object):
     def __init__(self, dataset, augmentation=True, num_epochs=None,
-                 num_threads=4, capacity=10000):
+                 num_threads=4, capacity=2 * ENCODE_SIZE):
         self.num_epochs = num_epochs
         self.augmentation = augmentation
         self.train_data, self.train_labels, self.test_data, self.test_labels = dataset
@@ -106,14 +106,14 @@ class Dataset(object):
 
         image, label, index = producer.random_slice_input_producer(
                 [self.input_images, self.input_labels, self.input_indexes],
-                num_epochs=self.num_epochs, seed=SEED)
+                num_epochs=self.num_epochs, seed=SEED, capacity=10000)
         if self.augmentation:
             image = self.process_train_image(image)
 
-        # switch back to (channels, h, w) for ckn encoding
-        image = tf.transpose(image, perm=[2, 0, 1])
         self.images, self.labels, self.indexes = tf.train.batch(
                 [image, label, index], batch_size=ENCODE_SIZE, num_threads=num_threads, capacity=capacity)
+        # switch back from NHWC to NCHW for ckn encoding
+        self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
 
 
     def init(self, sess):
@@ -153,22 +153,22 @@ class DatasetIterator(object):
         self.layers = layers
         self.sess = tf.Session()
         self.ds.init(self.sess)
+        self.encoder = None
         if self.ds.augmentation:
             tf.train.start_queue_runners(sess=self.sess)
-
-    def encode(self, image_data):
-        return ckn.encode_cudnn(
-                image_data.reshape(image_data.shape[0], 96, 32),
-                layers, cuda_device, CKN_BATCH_SIZE)
+            self.encoder = CKNEncoder([self.ds.images, self.ds.labels, self.ds.indexes],
+                                      self.ds.test_features.shape[1],
+                                      self.layers, batch_size=ENCODE_SIZE,
+                                      cuda_device=cuda_device, ckn_batch_size=CKN_BATCH_SIZE)
+            self.encoder.start_queue(self.sess)
 
     def run(self, num_epochs):
         n = self.ds.train_data.shape[0]        
         for step in range(n * num_epochs // ENCODE_SIZE):
             epoch = float(step) * ENCODE_SIZE / n
             if self.ds.augmentation:
-                image_data, labels, indexes = self.sess.run(
-                        [self.ds.images, self.ds.labels, self.ds.indexes])
-                X = self.encode(image_data)
+                X, labels, indexes = self.sess.run(
+                        [self.encoder.encoded, self.encoder.labels, self.encoder.indexes])
                 yield (epoch, X, labels, indexes)
             else:
                 indexes = np.random.randint(n, size=ENCODE_SIZE)
@@ -245,11 +245,12 @@ if __name__ == '__main__':
     layers = np.load(args.layers_file)
 
     with tf.device('/cpu:0'):
-        # ds = Dataset(load_cifar_pickle('/scratch/clear/abietti/data/cifar10_data/whitened.pkl'),
-        ds = Dataset(read_dataset_cifar10_whitened(args.dataset_matfile),
+        # ds = Dataset(read_dataset_cifar10_whitened(args.dataset_matfile),
+        ds = Dataset(load_cifar_pickle(args.dataset_file),
+        # ds = Dataset(load_mnist(),
                      augmentation=args.augmentation)
     # leave here to avoid stream executor issues by creating session
-    engine = DatasetIterator(ds, layers)
+    tf.Session()
     init_train = args.compute_loss or not ds.augmentation
     ds.init_test_features(layers, init_train=init_train)
 
@@ -271,6 +272,8 @@ if __name__ == '__main__':
 
     dim = Xtest.shape[1]
     n = ds.train_data.shape[0]
+
+    engine = DatasetIterator(ds, layers)
 
     loss = algos.LogisticLoss()
     lmbda = 6e-8
