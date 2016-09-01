@@ -33,10 +33,10 @@ class CKNDatasetBase(object):
         # self.validation_features = eval_in_batches(self.validation_data)
         self.test_features = eval_in_batches(self.test_data)
 
-    def init(self, sess):
+    def init(self, sess, coord=None):
         pass
 
-    def close(self, sess):
+    def close(self, sess, coord=None):
         pass
 
 
@@ -70,7 +70,7 @@ class CKNDataset(CKNDatasetBase):
         # switch from NHWC to NCHW for ckn encoding
         self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
 
-    def init(self, sess):
+    def init(self, sess, coord=None):
         sess.run(self.input_images.initializer,
                  feed_dict={self.images_initializer: self.train_data})
         sess.run(self.input_labels.initializer,
@@ -94,8 +94,8 @@ class CKNInfimnistDataset(CKNDatasetBase):
         # switch from NHWC to NCHW for ckn encoding
         self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
 
-    def init(self, sess):
-        self.producer.start_queue(sess)
+    def init(self, sess, coord=None):
+        self.producer.start_queue(sess, coord)
 
-    def close(self, sess):
-        self.producer.join(sess)
+    def close(self, sess, coord=None):
+        self.producer.join(sess, coord)

@@ -42,6 +42,8 @@ class CKNEncoder(object):
                 X = ckn.encode_cudnn(images.reshape(N, C*H, W), self.layers,
                                      self.cuda_device, self.ckn_batch_size)
 
+                if coord is not None and coord.should_stop():
+                    break
                 print('ENQUEUING INPUT DATA')
                 sess.run(self.enqueue_op, feed_dict={self.encoded_placeholder: X,
                                                      self.labels_placeholder: labels,
@@ -53,7 +55,10 @@ class CKNEncoder(object):
         self.thread = threading.Thread(target=self.encode_thread, args=(sess, coord))
         self.thread.start()
 
-    def join(self, sess):
-        sess.run(self.q.close(cancel_pending_enqueues=True))
+    def join(self, sess, coord=None):
+        # sess.run(self.q.close(cancel_pending_enqueues=True))
         if self.thread:
-            self.thread.join()
+            if coord is None:
+                self.thread.join()
+            else:
+                coord.join([self.thread])

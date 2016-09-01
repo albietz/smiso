@@ -14,9 +14,7 @@ from ckn_encode_queue import CKNEncoder
 
 import cifar10_input
 import mnist_input
-
-sys.path.append('/home/thoth/abietti/ckn_python/')
-import _ckn_cuda as ckn
+import stl10_input
 
 
 cuda_device = 0
@@ -29,15 +27,16 @@ class DatasetIterator(object):
         self.ds = ds
         self.layers = layers
         self.sess = tf.Session()
-        self.ds.init(self.sess)
+        self.coord = tf.train.Coordinator()
+        self.ds.init(self.sess, self.coord)
         self.encoder = None
         if self.ds.augmentation:
-            tf.train.start_queue_runners(sess=self.sess)
+            self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
             self.encoder = CKNEncoder([self.ds.images, self.ds.labels, self.ds.indexes],
                                       self.ds.test_features.shape[1],
                                       self.layers, batch_size=ENCODE_SIZE,
                                       cuda_device=cuda_device, ckn_batch_size=CKN_BATCH_SIZE)
-            self.encoder.start_queue(self.sess)
+            self.encoder.start_queue(self.sess, self.coord)
 
     def run(self, num_epochs):
         n = self.ds.train_data.shape[0]        
@@ -51,6 +50,12 @@ class DatasetIterator(object):
                 indexes = np.random.randint(n, size=ENCODE_SIZE)
                 yield (epoch, None, None, indexes)
 
+    def close(self):
+        self.coord.request_stop()
+        self.coord.join(self.threads)
+        self.ds.close(self.sess, self.coord)
+        self.encoder.join(self.sess, self.coord)
+        self.sess.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -59,6 +64,9 @@ if __name__ == '__main__':
     parser.add_argument('--experiment',
       default='cifar10',
       help='identifier of the experiment to run (dataset, model, etc)')
+    parser.add_argument('--nepochs',
+      default=10, type=int,
+      help='number of epochs to run')
     parser.add_argument('--results-file',
       default='tmp.pkl',
       help='Filename of results pickle file.')
@@ -97,11 +105,12 @@ if __name__ == '__main__':
       help='whether to compute train/test losses')
 
     args = parser.parse_args()
-    print('experiment:', args.experiment, 'augmentation:', args.augmentation, 'normalize:', args.normalize,
-          'no-decay:', args.no_decay)
+    print('experiment:', args.experiment, 'augmentation:', args.augmentation,
+          'normalize:', args.normalize, 'no-decay:', args.no_decay)
 
     cuda_device = args.cuda_device
 
+    # load experiment details
     if args.experiment == 'cifar10':
         model = cifar10_input.load_ckn_layers_whitened()
         data = cifar10_input.load_dataset_whitened()
@@ -117,9 +126,26 @@ if __name__ == '__main__':
         data = mnist_input.load_dataset()
         expt_params = mnist_input.params()
         augm_fn = None  # no need for tf augmentation
+    elif args.experiment.startswith('stl10'):
+        # format: stl10_<fold><t[est]/v[al]>
+        # e.g. stl10_3v for training with fold 3 and testing with
+        # the rest of the training set as validation set
+        fold = int(args.experiment[6])
+        if args.experiment[7] == 't':
+            data = stl10_input.load_train_test_white(fold)
+        else:
+            data = stl10_input.load_train_val_white(fold)
+        model = stl10_input.load_ckn_layers_whitened()
+        expt_params = stl10_input.params()
+        augm_fn = stl10_input.augmentation
     else:
         print('experiment', args.experiment, 'not supported!')
         sys.exit(0)
+
+    if 'ckn_batch_size' in expt_params:
+        CKN_BATCH_SIZE = expt_params['ckn_batch_size']
+    if 'encode_size' in expt_params:
+        ENCODE_SIZE = expt_params['encode_size']
 
     with tf.device('/cpu:0'):
         if args.experiment == 'infimnist':
@@ -155,6 +181,7 @@ if __name__ == '__main__':
 
     dim = Xtest.shape[1]
     n = ds.train_data.shape[0]
+    print('n =', n, 'dim =', dim)
 
     engine = DatasetIterator(ds, model)
 
@@ -183,7 +210,7 @@ if __name__ == '__main__':
     train_losses = []
     test_losses = []
     epochs = []
-    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(500)):
+    for step, (e, Xdata, labels, idxs) in enumerate(engine.run(args.nepochs)):
         t0 = time.time()
         if ds.augmentation:
             X = Xdata.astype(solvers.dtype)
@@ -243,4 +270,4 @@ if __name__ == '__main__':
                         open(os.path.join(expt_params.get('results_root', ''),
                                           args.results_file), 'wb'))
 
-    ds.close(sess)
+    engine.close()
