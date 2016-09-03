@@ -59,8 +59,8 @@ class CKNEncoder(object):
             self.threads.append(thread)
             thread.start()
 
-    def join(self, sess, coord=None):
-        # sess.run(self.q.close(cancel_pending_enqueues=True))
+    def join(self, sess, coord=None, cancel_pending_enqueues=True):
+        sess.run(self.q.close(cancel_pending_enqueues=cancel_pending_enqueues))
         if self.threads:
             if coord is None:
                 for thread in self.threads:

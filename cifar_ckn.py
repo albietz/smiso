@@ -40,7 +40,8 @@ class DatasetIterator(object):
 
     def run(self, num_epochs):
         n = self.ds.train_data.shape[0]        
-        for step in range(n * num_epochs // ENCODE_SIZE):
+        n_steps = n * num_epochs // ENCODE_SIZE
+        for step in range(n_steps):
             epoch = float(step) * ENCODE_SIZE / n
             if self.ds.augmentation:
                 X, labels, indexes = self.sess.run(
@@ -151,11 +152,11 @@ if __name__ == '__main__':
     with tf.device('/cpu:0'):
         if args.experiment == 'infimnist':
             ds = dataset.CKNInfimnistDataset(data, batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE,
-                                             cuda_device=cuda_devices[0], ckn_batch_size=CKN_BATCH_SIZE)
+                                             cuda_devices=cuda_devices, ckn_batch_size=CKN_BATCH_SIZE)
         else:
             ds = dataset.CKNDataset(data, augmentation=args.augmentation, augm_fn=augm_fn,
                                     batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE,
-                                    cuda_device=cuda_devices[0], ckn_batch_size=CKN_BATCH_SIZE)
+                                    cuda_devices=cuda_devices, ckn_batch_size=CKN_BATCH_SIZE)
 
     # leave here to avoid stream executor issues by creating session
     tf.Session()

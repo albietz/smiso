@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import tensorflow as tf
 import sys
@@ -10,9 +11,9 @@ import _ckn_cuda as ckn
 
 
 class CKNDatasetBase(object):
-    def __init__(self, dataset, augmentation=True, cuda_device=0, ckn_batch_size=256):
+    def __init__(self, dataset, augmentation=True, cuda_devices=None, ckn_batch_size=256):
         self.augmentation = augmentation
-        self.cuda_device = cuda_device
+        self.cuda_devices = cuda_devices or [0]
         self.ckn_batch_size = ckn_batch_size
         self.train_data, self.train_labels, self.test_data, self.test_labels = dataset
 
@@ -22,16 +23,19 @@ class CKNDatasetBase(object):
     def init_test_features(self, layers, init_train=False):
         '''Initialize feature vectors on validation/test data from a given model.'''
 
-        def eval_in_batches(data):
+        def eval_in_batches(data, cuda_device):
             N, H, W, C = data.shape
             X = data.transpose(0, 3, 1, 2).reshape(N, C*H, W)
             return ckn.encode_cudnn(np.ascontiguousarray(X), layers,
-                                    self.cuda_device, self.ckn_batch_size)
+                                    cuda_device, self.ckn_batch_size)
 
-        if init_train:
-            self.train_features = eval_in_batches(self.train_data)
-        # self.validation_features = eval_in_batches(self.validation_data)
-        self.test_features = eval_in_batches(self.test_data)
+        with ThreadPoolExecutor(max_workers=len(self.cuda_devices)) as executor:
+            test_future = executor.submit(eval_in_batches, self.test_data, self.cuda_devices[0])
+            if init_train:
+                train_future = executor.submit(eval_in_batches, self.train_data,
+                                               self.cuda_devices[1 % len(self.cuda_devices)])
+                self.train_features = train_future.result()
+            self.test_features = test_future.result()
 
     def init(self, sess, coord=None):
         pass
@@ -43,10 +47,9 @@ class CKNDatasetBase(object):
 class CKNDataset(CKNDatasetBase):
     def __init__(self, dataset, augmentation=True, augm_fn=None, num_epochs=None,
                  num_threads=4, batch_size=10000, capacity=20000, seed=None,
-                 cuda_device=0, ckn_batch_size=256):
-        super(CKNDataset, self).__init__(
-                dataset, augmentation=augmentation,
-                cuda_device=cuda_device, ckn_batch_size=ckn_batch_size)
+                 cuda_devices=None, ckn_batch_size=256):
+        super().__init__(dataset, augmentation=augmentation,
+                         cuda_devices=cuda_devices, ckn_batch_size=ckn_batch_size)
 
         # create the queue
         self.images_initializer = tf.placeholder(dtype=self.train_data.dtype,
@@ -81,10 +84,9 @@ class CKNDataset(CKNDatasetBase):
 
 class CKNInfimnistDataset(CKNDatasetBase):
     def __init__(self, dataset, batch_size=10000, capacity=20000,
-                 cuda_device=0, ckn_batch_size=256):
-        super(CKNInfimnistDataset, self).__init__(
-                dataset, augmentation=True,
-                cuda_device=cuda_device, ckn_batch_size=ckn_batch_size)
+                 cuda_devices=None, ckn_batch_size=256):
+        super().__init__(dataset, augmentation=True, cuda_devices=cuda_devices,
+                         ckn_batch_size=ckn_batch_size)
 
         self.producer = infimnist_queue.InfimnistProducer(
                 batch_size=batch_size, gen_batch_size=batch_size, capacity=capacity)
