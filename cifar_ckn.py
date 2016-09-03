@@ -185,23 +185,26 @@ if __name__ == '__main__':
 
     engine = DatasetIterator(ds, model)
 
-    loss = algos.LogisticLoss()
+    loss = b'squared_hinge'
     lmbda = expt_params['lmbda']
     print('lmbda:', lmbda)
 
     solver_list = [
-        solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss.name.encode('utf-8')),
+        solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss),
     ]
-    solver_params = [dict(name='miso_onevsrest', lmbda=lmbda, loss=loss.name)]
+    solver_params = [dict(name='miso_onevsrest', lmbda=lmbda, loss=loss)]
     # adjust miso step-size if needed (with L == 1)
-    solver_list[0].decay(min(1, lmbda * n / (1 - lmbda)))
+    if loss == b'logistic':
+        solver_list[0].decay(min(1, lmbda * n / (1 - lmbda)))
+    elif loss == b'squared_hinge':
+        solver_list[0].decay(min(1, lmbda * n / (2 - lmbda)))
 
     lrs = expt_params['lrs']
     print('lrs:', lrs)
     for lr in lrs:
         solver_list.append(solvers.SGDOneVsRest(
-                n_classes, dim, lr=lr, lmbda=lmbda, loss=loss.name.encode('utf-8')))
-        solver_params.append(dict(name='sgd_onevsrest', lr=lr, lmbda=lmbda, loss=loss.name))
+                n_classes, dim, lr=lr, lmbda=lmbda, loss=loss))
+        solver_params.append(dict(name='sgd_onevsrest', lr=lr, lmbda=lmbda, loss=loss))
 
     n_algos = len(solver_list)
     start_time = time.time()
@@ -210,6 +213,13 @@ if __name__ == '__main__':
     train_losses = []
     test_losses = []
     epochs = []
+    def save():
+        pickle.dump({'params': solver_params, 'epochs': epochs,
+                     'test_accs': test_accs, 'train_losses': train_losses,
+                     'test_losses': test_losses},
+                    open(os.path.join(expt_params.get('results_root', ''),
+                                      args.results_file), 'wb'))
+
     for step, (e, Xdata, labels, idxs) in enumerate(engine.run(args.nepochs)):
         t0 = time.time()
         if ds.augmentation:
@@ -228,10 +238,10 @@ if __name__ == '__main__':
         loss_test = []
         for alg, solver in enumerate(solver_list):
             if not args.no_decay and step == args.start_decay_step:
-                # print('starting stepsize decay')
-                # solver.start_decay()
-                print('decaying stepsize')
-                solver.decay(0.5)
+                print('starting stepsize decay')
+                solver.start_decay()
+                # print('decaying stepsize')
+                # solver.decay(0.5)
 
             t1 = time.time()
             if ds.augmentation:
@@ -264,10 +274,7 @@ if __name__ == '__main__':
         sys.stdout.flush()
 
         if step % 10 == 0:  # save stats every 10 steps
-            pickle.dump({'params': solver_params, 'epochs': epochs,
-                         'test_accs': test_accs, 'train_losses': train_losses,
-                         'test_losses': test_losses},
-                        open(os.path.join(expt_params.get('results_root', ''),
-                                          args.results_file), 'wb'))
+            save()
 
+    save()
     engine.close()

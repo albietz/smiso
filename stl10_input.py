@@ -14,8 +14,8 @@ WHITENED_CKN_MODEL = '/scratch/clear/abietti/results/ckn/stl10_white_py/layers_1
 def params():
     return {
         'n_classes': 10,
-        'lmbda': 6e-8,
-        'lrs': [0.1, 0.3, 1.0, 3.0],
+        'lmbda': 4e-4,
+        'lrs': [0.05, 0.1, 0.5],
         'results_root': '/scratch/clear/abietti/results/ckn/stl10_white_py/accs',
         'ckn_batch_size': 32,
         'encode_size': 2000,
