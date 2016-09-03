@@ -17,7 +17,7 @@ import mnist_input
 import stl10_input
 
 
-cuda_device = 0
+cuda_devices = [0]
 ENCODE_SIZE = 50000
 CKN_BATCH_SIZE = 256
 
@@ -35,7 +35,7 @@ class DatasetIterator(object):
             self.encoder = CKNEncoder([self.ds.images, self.ds.labels, self.ds.indexes],
                                       self.ds.test_features.shape[1],
                                       self.layers, batch_size=ENCODE_SIZE,
-                                      cuda_device=cuda_device, ckn_batch_size=CKN_BATCH_SIZE)
+                                      cuda_devices=cuda_devices, ckn_batch_size=CKN_BATCH_SIZE)
             self.encoder.start_queue(self.sess, self.coord)
 
     def run(self, num_epochs):
@@ -89,9 +89,9 @@ if __name__ == '__main__':
       dest='normalize',
       action='store_false',
       help='do not normalize')
-    parser.add_argument('--cuda-device',
-      default=0, type=int,
-      help='CUDA GPU device number')
+    parser.add_argument('--cuda-devices',
+      default='0',
+      help='CUDA GPU device numbers')
     parser.add_argument('--start-decay-step',
       default=20, type=int,
       help='step at which to start decaying the stepsize')
@@ -108,7 +108,8 @@ if __name__ == '__main__':
     print('experiment:', args.experiment, 'augmentation:', args.augmentation,
           'normalize:', args.normalize, 'no-decay:', args.no_decay)
 
-    cuda_device = args.cuda_device
+    cuda_devices = list(map(int, args.cuda_devices.split()))
+    assert len(cuda_devices) > 0, 'at least 1 GPU is needed for CKNs'
 
     # load experiment details
     if args.experiment == 'cifar10':
@@ -150,11 +151,11 @@ if __name__ == '__main__':
     with tf.device('/cpu:0'):
         if args.experiment == 'infimnist':
             ds = dataset.CKNInfimnistDataset(data, batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE,
-                                             cuda_device=cuda_device, ckn_batch_size=CKN_BATCH_SIZE)
+                                             cuda_device=cuda_devices[0], ckn_batch_size=CKN_BATCH_SIZE)
         else:
             ds = dataset.CKNDataset(data, augmentation=args.augmentation, augm_fn=augm_fn,
                                     batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE,
-                                    cuda_device=cuda_device, ckn_batch_size=CKN_BATCH_SIZE)
+                                    cuda_device=cuda_devices[0], ckn_batch_size=CKN_BATCH_SIZE)
 
     # leave here to avoid stream executor issues by creating session
     tf.Session()
