@@ -199,7 +199,7 @@ if __name__ == '__main__':
     if loss == b'logistic':
         solver_list[0].decay(min(1, lmbda * n / (1 - lmbda)))
     elif loss == b'squared_hinge':
-        solver_list[0].decay(min(1, lmbda * n / (2 - lmbda)))
+        solver_list[0].decay(min(1, lmbda * n / (1 - lmbda)))
 
     lrs = expt_params['lrs']
     print('lrs:', lrs)

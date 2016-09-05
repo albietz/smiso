@@ -22,7 +22,7 @@ class Loss {
     } else if (loss == "squared_hinge") {
       const Double s = y > 0 ? pred : -pred;
       const Double hinge = std::max(0.0, 1.0 - s);
-      return hinge * hinge;
+      return 0.5 * hinge * hinge;
     } else {
       std::cerr << "loss not supported: " << loss;
       return 0;
@@ -45,7 +45,7 @@ class Loss {
       if (s > 1) {
         g = Vector::Zero(x.size());
       } else {
-        g = (y > 0 ? -2 : 2) * (1.0 - s) * x.transpose();
+        g = (y > 0 ? -1 : 1) * (1.0 - s) * x.transpose();
       }
     } else {
       std::cerr << "loss not supported: " << loss;

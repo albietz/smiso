@@ -57,6 +57,7 @@ class CKNEncoder(object):
         for cuda_device in self.cuda_devices:
             thread = threading.Thread(target=self.encode_thread, args=(sess, coord, cuda_device))
             self.threads.append(thread)
+            thread.daemon = True
             thread.start()
 
     def join(self, sess, coord=None, cancel_pending_enqueues=True):

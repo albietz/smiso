@@ -5,10 +5,10 @@ import tensorflow as tf
 CKN_MODEL = '/scratch/clear/abietti/results/ckn/mnist_py/layers_1.npy'
 
 
-def load_dataset():
+def load_dataset(num_transformations=0):
     from infimnist import _infimnist as imnist
     mnist = imnist.InfimnistGenerator()
-    digits_train, labels_train = mnist.gen(np.arange(10000, 70000))  # training digits
+    digits_train, labels_train = mnist.gen(np.arange(10000, 70000 + num_transformations * 60000))  # training digits
     digits_test, labels_test = mnist.gen(np.arange(10000))  # test digits
     def getX(digits):
         return digits.reshape(-1, 28, 28, 1).astype(np.float32)
@@ -23,9 +23,10 @@ def load_ckn_layers():
 def params():
     return {
         'n_classes': 10,
-        'lmbda': 6e-8,
-        'lrs': [0.1, 0.3, 1.0, 3.0],
+        'lmbda': 5e-8,
+        'lrs': [0.1, 0.3, 1.0],
         'results_root': '/scratch/clear/abietti/results/ckn/mnist_py/accs',
+        'encode_size': 60000,
     }
 
 
