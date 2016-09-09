@@ -1,41 +1,61 @@
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
-import tensorflow as tf
 import sys
+import tensorflow as tf
+import time
 
 from infimnist import infimnist_queue
 import producer
 
-sys.path.append('/home/thoth/abietti/ckn_python/')
-import _ckn_cuda as ckn
 
-
-class CKNDatasetBase(object):
-    def __init__(self, dataset, augmentation=True, cuda_devices=None, ckn_batch_size=256):
+class DatasetBase(object):
+    def __init__(self, dataset, augmentation=True):
         self.augmentation = augmentation
-        self.cuda_devices = cuda_devices or [0]
-        self.ckn_batch_size = ckn_batch_size
         self.train_data, self.train_labels, self.test_data, self.test_labels = dataset
 
         self.train_features = None
         self.test_features = None
 
-    def init_test_features(self, layers, init_train=False):
+    def init_features(self, model_type='ckn', model_params=None, init_train=False):
         '''Initialize feature vectors on validation/test data from a given model.'''
 
-        def eval_in_batches(data, cuda_device):
-            N, H, W, C = data.shape
-            X = data.transpose(0, 3, 1, 2).reshape(N, C*H, W)
-            return ckn.encode_cudnn(np.ascontiguousarray(X), layers,
-                                    cuda_device, self.ckn_batch_size)
+        model_params = model_params or {}
 
-        with ThreadPoolExecutor(max_workers=len(self.cuda_devices)) as executor:
-            test_future = executor.submit(eval_in_batches, self.test_data, self.cuda_devices[0])
+        if model_type == 'ckn':
+            sys.path.append('/home/thoth/abietti/ckn_python/')
+            import _ckn_cuda as ckn
+
+            layers = model_params['layers']
+            cuda_devices = model_params['cuda_devices']
+            ckn_batch_size = model_params['ckn_batch_size']
+
+            def eval_in_batches(data, cuda_device):
+                N, H, W, C = data.shape
+                X = data.transpose(0, 3, 1, 2).reshape(N, C*H, W)
+                return ckn.encode_cudnn(np.ascontiguousarray(X), layers,
+                                        cuda_device, ckn_batch_size)
+
+            with ThreadPoolExecutor(max_workers=len(cuda_devices)) as executor:
+                test_future = executor.submit(eval_in_batches, self.test_data, cuda_devices[0])
+                if init_train:
+                    train_future = executor.submit(eval_in_batches, self.train_data,
+                                                   cuda_devices[1 % len(cuda_devices)])
+                    self.train_features = train_future.result()
+                self.test_features = test_future.result()
+
+        elif model_type == 'scattering':
+            filters = model_params['filters']
+            m = model_params['m']
+            num_workers = model_params['num_workers']
+
+            from scattering_encoder import ScatteringEncoder
+            encoder = ScatteringEncoder(filters, m, num_workers=num_workers)
+            print('encoding...')
+            t = time.time()
             if init_train:
-                train_future = executor.submit(eval_in_batches, self.train_data,
-                                               self.cuda_devices[1 % len(self.cuda_devices)])
-                self.train_features = train_future.result()
-            self.test_features = test_future.result()
+                self.train_features = encoder.encode_nhwc(self.train_data)
+            self.test_features = encoder.encode_nhwc(self.test_data)
+            print('done encoding. time elapsed', time.time() - t)
 
     def init(self, sess, coord=None):
         pass
@@ -44,12 +64,10 @@ class CKNDatasetBase(object):
         pass
 
 
-class CKNDataset(CKNDatasetBase):
+class Dataset(DatasetBase):
     def __init__(self, dataset, augmentation=True, augm_fn=None, num_epochs=None,
-                 num_threads=4, batch_size=10000, capacity=20000, seed=None,
-                 cuda_devices=None, ckn_batch_size=256):
-        super().__init__(dataset, augmentation=augmentation,
-                         cuda_devices=cuda_devices, ckn_batch_size=ckn_batch_size)
+                 num_threads=4, batch_size=10000, capacity=20000, seed=None):
+        super().__init__(dataset, augmentation=augmentation)
 
         # create the queue
         self.images_initializer = tf.placeholder(dtype=self.train_data.dtype,
@@ -70,7 +88,7 @@ class CKNDataset(CKNDatasetBase):
 
         self.images, self.labels, self.indexes = tf.train.batch(
                 [image, label, index], batch_size=batch_size, num_threads=num_threads, capacity=capacity)
-        # switch from NHWC to NCHW for ckn encoding
+        # switch from NHWC to NCHW for encoding
         self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
 
     def init(self, sess, coord=None):
@@ -82,18 +100,16 @@ class CKNDataset(CKNDatasetBase):
                  feed_dict={self.indexes_initializer: range(self.train_labels.shape[0])})
 
 
-class CKNInfimnistDataset(CKNDatasetBase):
-    def __init__(self, dataset, batch_size=10000, capacity=20000,
-                 cuda_devices=None, ckn_batch_size=256):
-        super().__init__(dataset, augmentation=True, cuda_devices=cuda_devices,
-                         ckn_batch_size=ckn_batch_size)
+class InfimnistDataset(DatasetBase):
+    def __init__(self, dataset, batch_size=10000, capacity=20000):
+        super().__init__(dataset, augmentation=True, cuda_devices=cuda_devices)
 
         self.producer = infimnist_queue.InfimnistProducer(
                 batch_size=batch_size, gen_batch_size=batch_size, capacity=capacity)
 
         self.images, self.labels, self.indexes = \
                 self.producer.digits, self.producer.labels, self.producer.indexes
-        # switch from NHWC to NCHW for ckn encoding
+        # switch from NHWC to NCHW for ckn/scattering encoding
         self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
 
     def init(self, sess, coord=None):

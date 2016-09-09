@@ -10,32 +10,42 @@ import tensorflow as tf
 import algos
 import solvers
 import dataset
-from ckn_encode_queue import CKNEncoder
 
 import cifar10_input
 import mnist_input
 import stl10_input
 
-
-cuda_devices = [0]
 ENCODE_SIZE = 50000
-CKN_BATCH_SIZE = 256
 
 
 class DatasetIterator(object):
-    def __init__(self, ds, layers):
+    def __init__(self, ds, model_type='ckn', model_params=None):
         self.ds = ds
-        self.layers = layers
         self.sess = tf.Session()
         self.coord = tf.train.Coordinator()
         self.ds.init(self.sess, self.coord)
         self.encoder = None
         if self.ds.augmentation:
             self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-            self.encoder = CKNEncoder([self.ds.images, self.ds.labels, self.ds.indexes],
-                                      self.ds.test_features.shape[1],
-                                      self.layers, batch_size=ENCODE_SIZE,
-                                      cuda_devices=cuda_devices, ckn_batch_size=CKN_BATCH_SIZE)
+            if model_type == 'ckn':
+                from ckn_queued_encoder import CKNQueuedEncoder
+                self.encoder = CKNQueuedEncoder(
+                        [self.ds.images, self.ds.labels, self.ds.indexes],
+                        self.ds.test_features.shape[1],
+                        model_params['layers'], batch_size=ENCODE_SIZE,
+                        cuda_devices=model_params['cuda_devices'],
+                        ckn_batch_size=model_params['ckn_batch_size'])
+            elif model_type == 'scattering':
+                from scattering_queued_encoder import ScatteringQueuedEncoder
+                self.encoder = ScatteringQueuedEncoder(
+                    [self.ds.images, self.ds.labels, self.ds.indexes],
+                    self.ds.test_features.shape[1], batch_size=ENCODE_SIZE,
+                    filters=model_params['filters'], m=model_params['m'],
+                    num_workers=model_params['num_workers'])
+            else:
+                print('bad model type for data augmentation:', model_type)
+                sys.exit(0)
+
             self.encoder.start_queue(self.sess, self.coord)
 
     def run(self, num_epochs):
@@ -65,6 +75,9 @@ if __name__ == '__main__':
     parser.add_argument('--experiment',
       default='cifar10',
       help='identifier of the experiment to run (dataset, model, etc)')
+    parser.add_argument('--model-type',
+      default='ckn',
+      help='identifier of the model type (ckn, scattering)')
     parser.add_argument('--nepochs',
       default=10, type=int,
       help='number of epochs to run')
@@ -93,6 +106,9 @@ if __name__ == '__main__':
     parser.add_argument('--cuda-devices',
       default='0',
       help='CUDA GPU device numbers')
+    parser.add_argument('--num-workers',
+      default=10, type=int,
+      help='number of processes for scattering encoding')
     parser.add_argument('--start-decay-step',
       default=20, type=int,
       help='step at which to start decaying the stepsize')
@@ -109,60 +125,82 @@ if __name__ == '__main__':
     print('experiment:', args.experiment, 'augmentation:', args.augmentation,
           'normalize:', args.normalize, 'no-decay:', args.no_decay)
 
-    cuda_devices = list(map(int, args.cuda_devices.split()))
-    assert len(cuda_devices) > 0, 'at least 1 GPU is needed for CKNs'
-
-    # load experiment details
-    if args.experiment == 'cifar10':
-        model = cifar10_input.load_ckn_layers_whitened()
-        data = cifar10_input.load_dataset_whitened()
-        expt_params = cifar10_input.params()
-        augm_fn = cifar10_input.augmentation
-    elif args.experiment == 'mnist':
-        model = mnist_input.load_ckn_layers()
-        data = mnist_input.load_dataset()
-        expt_params = mnist_input.params()
-        augm_fn = mnist_input.augmentation
-    elif args.experiment == 'infimnist':
-        model = mnist_input.load_ckn_layers()
-        data = mnist_input.load_dataset()
-        expt_params = mnist_input.params()
-        augm_fn = None  # no need for tf augmentation
-    elif args.experiment.startswith('stl10'):
-        # format: stl10_<fold><t[est]/v[al]>
-        # e.g. stl10_3v for training with fold 3 and testing with
-        # the rest of the training set as validation set
-        fold = int(args.experiment[6])
-        if args.experiment[7] == 't':
-            data = stl10_input.load_train_test_white(fold)
+    model_params = {}
+    if args.model_type == 'ckn':
+        # load experiment details
+        if args.experiment == 'cifar10':
+            model = cifar10_input.load_ckn_layers_whitened()
+            data = cifar10_input.load_dataset_whitened()
+            expt_params = cifar10_input.params()
+            augm_fn = cifar10_input.augmentation
+        elif args.experiment == 'mnist':
+            model = mnist_input.load_ckn_layers()
+            data = mnist_input.load_dataset()
+            expt_params = mnist_input.params()
+            augm_fn = mnist_input.augmentation
+        elif args.experiment == 'infimnist':
+            model = mnist_input.load_ckn_layers()
+            data = mnist_input.load_dataset()
+            expt_params = mnist_input.params()
+            augm_fn = None  # no need for tf augmentation
+        elif args.experiment.startswith('stl10'):
+            # format: stl10_<fold><t[est]/v[al]>
+            # e.g. stl10_3v for training with fold 3 and testing with
+            # the rest of the training set as validation set
+            fold = int(args.experiment[6])
+            if args.experiment[7] == 't':
+                data = stl10_input.load_train_test_white(fold)
+            else:
+                data = stl10_input.load_train_val_white(fold)
+            model = stl10_input.load_ckn_layers_whitened()
+            expt_params = stl10_input.params()
+            augm_fn = stl10_input.augmentation
         else:
-            data = stl10_input.load_train_val_white(fold)
-        model = stl10_input.load_ckn_layers_whitened()
-        expt_params = stl10_input.params()
-        augm_fn = stl10_input.augmentation
+            print('experiment', args.experiment, 'not supported!')
+            sys.exit(0)
+
+        cuda_devices = list(map(int, args.cuda_devices.split()))
+        assert len(cuda_devices) > 0, 'at least 1 GPU is needed for CKNs'
+        model_params['cuda_devices'] = cuda_devices
+        model_params['layers'] = model
+        model_params['ckn_batch_size'] = expt_params.get('ckn_batch_size', 256)
+
+    elif args.model_type == 'scattering':
+        # load experiment details
+        if args.experiment == 'cifar10':
+            data = cifar10_input.load_dataset_raw()
+            filters, m = cifar10_input.get_scattering_params()
+            expt_params = cifar10_input.params_scat()
+            augm_fn = cifar10_input.augmentation
+        else:
+            print('experiment', args.experiment,
+                  'not supported for model type', args.model_type)
+            sys.exit(0)
+
+        model_params['filters'] = filters
+        model_params['m'] = m
+        model_params['num_workers'] = args.num_workers
+
     else:
-        print('experiment', args.experiment, 'not supported!')
+        print('model type', args.model_type, 'is not supported!')
         sys.exit(0)
 
-    if 'ckn_batch_size' in expt_params:
-        CKN_BATCH_SIZE = expt_params['ckn_batch_size']
+
     if 'encode_size' in expt_params:
         ENCODE_SIZE = expt_params['encode_size']
 
     with tf.device('/cpu:0'):
         if args.experiment == 'infimnist':
-            ds = dataset.CKNInfimnistDataset(data, batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE,
-                                             cuda_devices=cuda_devices, ckn_batch_size=CKN_BATCH_SIZE)
+            ds = dataset.InfimnistDataset(data, batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE)
         else:
-            ds = dataset.CKNDataset(data, augmentation=args.augmentation, augm_fn=augm_fn,
-                                    batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE,
-                                    cuda_devices=cuda_devices, ckn_batch_size=CKN_BATCH_SIZE)
+            ds = dataset.Dataset(data, augmentation=args.augmentation, augm_fn=augm_fn,
+                                 batch_size=ENCODE_SIZE, capacity=2*ENCODE_SIZE)
 
     # leave here to avoid stream executor issues by creating session
     tf.Session()
 
     init_train = args.compute_loss or not ds.augmentation
-    ds.init_test_features(model, init_train=init_train)
+    ds.init_features(args.model_type, model_params, init_train=init_train)
 
     n_classes = expt_params['n_classes']
     Xtest = ds.test_features.astype(solvers.dtype)
@@ -185,7 +223,7 @@ if __name__ == '__main__':
     n = ds.train_data.shape[0]
     print('n =', n, 'dim =', dim)
 
-    engine = DatasetIterator(ds, model)
+    engine = DatasetIterator(ds, args.model_type, model_params)
 
     loss = b'squared_hinge'
     lmbda = expt_params['lmbda']
@@ -215,6 +253,7 @@ if __name__ == '__main__':
     train_losses = []
     test_losses = []
     epochs = []
+
     def save():
         pickle.dump({'params': solver_params, 'epochs': epochs,
                      'test_accs': test_accs, 'train_losses': train_losses,
@@ -242,7 +281,7 @@ if __name__ == '__main__':
             if not args.no_decay and step == args.start_decay_step:
                 print('starting stepsize decay')
                 solver.start_decay()
-                # print('decaying stepsize')
+                # print('halving stepsize')
                 # solver.decay(0.5)
 
             t1 = time.time()
