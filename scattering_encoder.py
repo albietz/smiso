@@ -1,3 +1,4 @@
+import multiprocessing
 import numpy as np
 import time
 
@@ -7,6 +8,18 @@ from skimage.feature.scattering import scattering
 
 
 USE_YUV = True
+pool = None
+
+
+def create_pool(num_workers):
+    global pool
+    pool = multiprocessing.Pool(num_workers)
+
+
+def close_pool():
+    global pool
+    if pool is not None:
+        pool.close()
 
 
 # for ProcessPoolExecutor
@@ -24,14 +37,14 @@ def process_worker(im, dim, filters, m, batch_size):
 
 
 class ScatteringEncoder(object):
-    def __init__(self, filters, m=2, num_workers=5, batch_size=500):
+    def __init__(self, filters, m=2, batch_size=500):
         self.filters = filters
         self.m = m
-        self.num_workers = num_workers
         self.batch_size = batch_size
         self.dim = None  # feature dimension, to be inferred
 
     def encode_nchw(self, images):
+        global pool
         N, C, H, W = images.shape
 
         # infer dimension for allocation
@@ -40,15 +53,16 @@ class ScatteringEncoder(object):
             s = s.reshape(s.shape[0], -1)
             self.dim = C * s.shape[1]
 
-        with ProcessPoolExecutor(max_workers=self.num_workers) as ex:
-            futures = []
-            n_per_worker = N // self.num_workers + 1
-            for i in range(0, N, n_per_worker):
-                futures.append(ex.submit(
-                    process_worker, images[i:i+n_per_worker],
-                    self.dim, self.filters, self.m, self.batch_size))
+        # with ProcessPoolExecutor(max_workers=self.num_workers) as ex:
+        num_workers = pool._processes
+        res = []
+        n_per_worker = N // num_workers + 1
+        for i in range(0, N, n_per_worker):
+            res.append(pool.apply_async(
+                process_worker, (images[i:i+n_per_worker],
+                self.dim, self.filters, self.m, self.batch_size)))
 
-            return np.vstack([f.result() for f in futures])
+        return np.vstack([r.get() for r in res])
 
     def encode_nhwc(self, images):
         return self.encode_nchw(images.transpose(0, 3, 1, 2))

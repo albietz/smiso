@@ -190,6 +190,16 @@ class OneVsRest {
     return loss / dataSize;
   }
 
+  Double computeSquaredNorm() const {
+    Double res = 0;
+#pragma omp parallel for reduction(+:res)
+    for (size_t c = 0; c < nclasses_; ++c) {
+      res += solvers_[c].w().squaredNorm();
+    }
+
+    return res;
+  }
+
  private:
   const size_t nclasses_;
 

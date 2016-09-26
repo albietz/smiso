@@ -14,10 +14,22 @@ WHITENED_CKN_MODEL = '/scratch/clear/abietti/results/ckn/stl10_white_py/layers_1
 def params():
     return {
         'n_classes': 10,
-        'lmbda': 4e-4,
-        'lrs': [0.05, 0.1, 0.5],
+        # 'lmbda': [0.01, 1e-4, 1e-6, 1e-8],
+        'lmbda': [1e-3, 1e-5],
+        'lrs': [0.1, 0.5, 1.0],
+        'miso_lrs': [0.1, 0.5, 1.0],
         'results_root': '/scratch/clear/abietti/results/ckn/stl10_white_py/accs',
         'ckn_batch_size': 32,
+        'encode_size': 4000,
+    }
+
+
+def params_scat():
+    return {
+        'n_classes': 10,
+        'lmbda': 1e-5,
+        'lrs': [0.1, 0.5, 1.0],
+        'results_root': '/scratch/clear/abietti/results/ckn/stl10_white_py/accs',
         'encode_size': 2000,
     }
 
@@ -26,8 +38,25 @@ def load_ckn_layers_whitened():
     return np.load(WHITENED_CKN_MODEL)
 
 
+def get_scattering_params():
+    from skimage.filters.filter_bank import multiresolution_filter_bank_morlet2d
+    filters, lw = multiresolution_filter_bank_morlet2d(128, J=4, L=4, sigma_phi=0.8, sigma_xi=0.8)
+    m = 2
+    return filters, m
+
+
 def load_train_val_white(fold=0):
     X = np.load(os.path.join(DATA_DIR, 'train_X_white.npy'))
+    y = read_labels(os.path.join(DATA_DIR, 'train_y.bin')).astype(np.int32)
+
+    idxs = fold_idxs(fold)
+    idxs_val = np.setdiff1d(np.arange(X.shape[0]), idxs)
+
+    return X[idxs], y[idxs], X[idxs_val], y[idxs_val]
+
+
+def load_train_val_raw(fold=0):
+    X = read_all_images(os.path.join(DATA_DIR, 'train_X.bin')).astype(np.float32) / 255
     y = read_labels(os.path.join(DATA_DIR, 'train_y.bin')).astype(np.int32)
 
     idxs = fold_idxs(fold)
@@ -47,10 +76,30 @@ def load_train_test_white(fold=0):
     return X[idxs], y[idxs].astype(np.int32), Xt, yt.astype(np.int32)
 
 
+def load_train_test_raw(fold=0):
+    X = read_all_images(os.path.join(DATA_DIR, 'train_X.bin')).astype(np.float32) / 255
+    y = read_labels(os.path.join(DATA_DIR, 'train_y.bin'))
+    Xt = read_all_images(os.path.join(DATA_DIR, 'test_X.bin')).astype(np.float32) / 255
+    yt = read_labels(os.path.join(DATA_DIR, 'test_y.bin'))
+
+    idxs = fold_idxs(fold)
+
+    return X[idxs], y[idxs].astype(np.int32), Xt, yt.astype(np.int32)
+
+
 def load_train_test_full_white():
     X = np.load(os.path.join(DATA_DIR, 'train_X_white.npy'))
     y = read_labels(os.path.join(DATA_DIR, 'train_y.bin'))
     Xt = np.load(os.path.join(DATA_DIR, 'test_X_white.npy'))
+    yt = read_labels(os.path.join(DATA_DIR, 'test_y.bin'))
+
+    return X, y.astype(np.int32), Xt, yt.astype(np.int32)
+
+
+def load_train_test_full_raw():
+    X = read_all_images(os.path.join(DATA_DIR, 'train_X.bin')).astype(np.float32) / 255
+    y = read_labels(os.path.join(DATA_DIR, 'train_y.bin'))
+    Xt = read_all_images(os.path.join(DATA_DIR, 'test_X.bin')).astype(np.float32) / 255
     yt = read_labels(os.path.join(DATA_DIR, 'test_y.bin'))
 
     return X, y.astype(np.int32), Xt, yt.astype(np.int32)
@@ -61,7 +110,20 @@ def fold_idxs(fold):
     return np.fromstring(folds[fold], dtype=int, sep=' ')
 
 
-def augmentation(image):
+def augmentation(image, sz=96):
+    image = tf.image.resize_image_with_crop_or_pad(image, sz+8, sz+8)
+    offset = tf.random_uniform([1], maxval=16, dtype=tf.int32)[0]
+    image = tf.random_crop(image, size=[sz-offset, sz-offset, 3])
+    image = tf.image.resize_images(image, sz, sz)
+    image.set_shape([sz, sz, 3])
+    return image
+
+
+def augmentation_scat(image):
+    return augmentation(image, sz=128)
+
+
+def augmentation_pad(image):
     # pad with zeros to make the image 100x100
     image = tf.image.resize_image_with_crop_or_pad(image, 100, 100)
 

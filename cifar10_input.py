@@ -23,9 +23,10 @@ def params():
 def params_scat():
     return {
         'n_classes': 10,
-        'lmbda': 2e-8,
+        'lmbda': 2.4e-7,
         'lrs': [0.1, 0.3, 1.0],
         'results_root': '/scratch/clear/abietti/results/ckn/cifar10white_py/accs',
+        'encode_size': 20000,
     }
 
 
@@ -94,12 +95,21 @@ def load_ckn_layers_whitened():
 
 def get_scattering_params():
     from skimage.filters.filter_bank import multiresolution_filter_bank_morlet2d
-    filters, lw = multiresolution_filter_bank_morlet2d(32, J=3, L=8, sigma_phi=0.8, sigma_xi=0.8)
+    filters, lw = multiresolution_filter_bank_morlet2d(32, J=3, L=5, sigma_phi=0.8, sigma_xi=0.8)
     m = 2
     return filters, m
 
 
 def augmentation(image):
+    sz = 32
+    offset = tf.random_uniform([1], maxval=8, dtype=tf.int32)[0]
+    image = tf.random_crop(image, size=[sz-offset, sz-offset, 3])
+    image = tf.image.resize_images(image, sz, sz)
+    image.set_shape([sz, sz, 3])
+    return image
+
+
+def augmentation_pad(image):
     # pad with zeros to make the image 36x36
     image = tf.image.resize_image_with_crop_or_pad(image, 36, 36)
 

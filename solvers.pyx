@@ -65,6 +65,7 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
         Double computeLoss(const size_t sz,
                            const Double* const XData,
                            const int32_t* const yData)
+        Double computeSquaredNorm()
 
 cdef extern from "solvers/Loss.h" namespace "solvers":
     void setGradSigma "solvers::Loss::setGradSigma"(
@@ -177,6 +178,9 @@ cdef class SGDOneVsRest:
     def compute_loss(self, Double[:,::1] X not None, int32_t[::1] y not None):
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
+
 
 cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
@@ -286,3 +290,6 @@ cdef class MISOOneVsRest:
 
     def compute_loss(self, Double[:,::1] X not None, int32_t[::1] y not None):
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()

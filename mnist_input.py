@@ -30,7 +30,16 @@ def params():
     }
 
 
-def augmentation(image):
+def augmentation(image, sz=28):
+    image = tf.image.resize_image_with_crop_or_pad(image, sz+8, sz+8)
+    offset = tf.random_uniform([1], maxval=16, dtype=tf.int32)[0]
+    image = tf.random_crop(image, size=[sz-offset, sz-offset, 1])
+    image = tf.image.resize_images(image, sz, sz)
+    image.set_shape([sz, sz, 1])
+    return image
+
+
+def augmentation_pad(image):
     # pad with zeros to make the image 32x32
     image = tf.image.resize_image_with_crop_or_pad(image, 32, 32)
 
