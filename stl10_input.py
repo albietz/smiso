@@ -8,7 +8,7 @@ W = 96
 C = 3
 
 DATA_DIR = '/scratch/clear/abietti/data/stl10_binary'
-WHITENED_CKN_MODEL = '/scratch/clear/abietti/results/ckn/stl10_white_py/layers_1.npy'
+MODEL_DIR = '/scratch/clear/abietti/results/ckn/stl10_white_3_11'
 
 
 def params():
@@ -18,7 +18,7 @@ def params():
         'lmbda': [1e-3, 1e-5],
         'lrs': [0.1, 0.5, 1.0],
         'miso_lrs': [0.1, 0.5, 1.0],
-        'results_root': '/scratch/clear/abietti/results/ckn/stl10_white_py/accs',
+        'results_root': os.path.join(MODEL_DIR, 'accs'),
         'ckn_batch_size': 32,
         'encode_size': 4000,
     }
@@ -29,13 +29,13 @@ def params_scat():
         'n_classes': 10,
         'lmbda': 1e-5,
         'lrs': [0.1, 0.5, 1.0],
-        'results_root': '/scratch/clear/abietti/results/ckn/stl10_white_py/accs',
+        'results_root': os.path.join(MODEL_DIR, 'accs_scat'),
         'encode_size': 2000,
     }
 
 
 def load_ckn_layers_whitened():
-    return np.load(WHITENED_CKN_MODEL)
+    return np.load(os.path.join(MODEL_DIR, 'layers_1.npy'))
 
 
 def get_scattering_params():

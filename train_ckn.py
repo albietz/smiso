@@ -66,7 +66,7 @@ if __name__=="__main__":
     parser.add_argument('--results-root',
         # default='/scratch/clear/abietti/results/ckn/cifar10white_py/',
         # default='/scratch/clear/abietti/results/ckn/mnist_py/',
-        default='/scratch/clear/abietti/results/ckn/stl10_white_py/',
+        default='/scratch/clear/abietti/results/ckn/stl10_white_3_11/',
         help='Root folder for results.')
     parser.add_argument('-N', '--n-patch-training', type=int,
         default=1000000,
