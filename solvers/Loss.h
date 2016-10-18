@@ -3,10 +3,28 @@
 
 #include <random>
 #include <string>
+#include <type_traits>
 
 #include "common.h"
 
 namespace solvers {
+
+namespace detail {
+
+template <typename Derived, typename VecT>
+using EBase = typename std::conditional<
+  std::is_base_of<Eigen::MatrixBase<VecT>, VecT>::value,
+  Eigen::MatrixBase<Derived>,
+  Eigen::SparseMatrixBase<Derived>>::type;
+
+inline void makeZero(SpVector& g, const size_t sz) {
+  g.setZero();
+}
+
+inline void makeZero(Vector& g, const size_t sz) {
+  g = Vector::Zero(sz);
+}
+}
 
 class Loss {
  public:
@@ -29,12 +47,12 @@ class Loss {
     }
   }
 
-  template <typename Derived>
-  static Vector computeGradient(const std::string& loss,
-                                const Eigen::MatrixBase<Derived>& x,
-                                const Double pred,
-                                const Double y) {
-    Vector g;
+  template <typename VectorT, typename Derived>
+  static void computeGradient(VectorT& g,
+                              const std::string& loss,
+                              const detail::EBase<Derived, VectorT>& x,
+                              const Double pred,
+                              const Double y) {
     if (loss == "l2") {
       g = (pred - y) * x.transpose();
     } else if (loss == "logistic") {
@@ -43,13 +61,12 @@ class Loss {
     } else if (loss == "squared_hinge") {
       const Double s = y > 0 ? pred : -pred;
       if (s > 1) {
-        g = Vector::Zero(x.size());
+        detail::makeZero(g, x.size());
       } else {
         g = (y > 0 ? -1 : 1) * (1.0 - s) * x.transpose();
       }
     } else {
       std::cerr << "loss not supported: " << loss;
-      g = Vector::Zero(x.size());
     }
 
     if (gradSigma_ > 0) {
@@ -58,7 +75,6 @@ class Loss {
           return val + distr(gen_);
         });
     }
-    return g;
   }
 
   static void setGradSigma(const Double gradSigma) {

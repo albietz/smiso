@@ -1,6 +1,7 @@
 # distutils: include_dirs = /scratch/clear/abietti/local/include
 
 import numpy as np
+import scipy.sparse as sp
 cimport numpy as np
 
 from cpython.ref cimport PyObject, Py_INCREF
@@ -52,6 +53,28 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
             const size_t blockSize,
             const int64_t* const idxData) nogil
 
+    # for sparse data
+    void iterateBlockSparse "solvers::Solver::iterateBlock"[SolverT](
+            SolverT& solver,
+            const size_t blockSize,
+            const size_t nnz,
+            const int32_t* const Xindptr,
+            const int32_t* const Xindices,
+            const Double* const Xvalues,
+            const Double* const yData,
+            const int64_t* const idxData) nogil
+
+    void iterateBlockIndexedSparse "solvers::Solver::iterateBlockIndexed"[SolverT](
+            SolverT& solver,
+            const size_t dataSize,
+            const size_t nnz,
+            const int32_t* const Xindptr,
+            const int32_t* const Xindices,
+            const Double* const Xvalues,
+            const Double* const yData,
+            const size_t blockSize,
+            const int64_t* const idxData) nogil
+
     cdef cppclass OneVsRest[SolverT]:
         OneVsRest(size_t nclasses, ...)
         size_t nclasses()
@@ -81,12 +104,21 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
         size_t nfeatures()
         Double* wdata()
 
+    cdef cppclass _SparseSGD "solvers::SparseSGD":
+        _SparseSGD(size_t dim, Double lr, Double lmbda, string loss)
+        void startDecay()
+        void decay(Double mult)
+        size_t t()
+        size_t nfeatures()
+        Double* wdata()
+
 
 def set_grad_sigma(Double gradSigma):
     setGradSigma(gradSigma)
 
 def grad_sigma():
     return gradSigma()
+
 
 cdef class SGD:
     cdef _SGD* solver
@@ -139,6 +171,72 @@ cdef class SGD:
                                   &y[0],
                                   idx.shape[0],
                                   &idx[0])
+
+
+cdef class SparseSGD:
+    cdef _SparseSGD* solver
+
+    def __cinit__(self, size_t dim, Double lr=0.1,
+                  Double lmbda=0., string loss="logistic"):
+        self.solver = new _SparseSGD(dim, lr, lmbda, loss)
+
+    def __dealloc__(self):
+        del self.solver
+
+    property nfeatures:
+        def __get__(self):
+            return self.solver.nfeatures()
+
+    property w:
+        def __get__(self):
+            cdef np.npy_intp shape[1]
+            shape[0] = self.nfeatures
+            cdef np.ndarray[Double, ndim=1] arr = \
+                np.PyArray_SimpleNewFromData(1, shape, npDOUBLE,
+                                             self.solver.wdata())
+            Py_INCREF(self)
+            PyArray_SetBaseObject(arr, <PyObject*>self)
+            return arr
+
+    def start_decay(self):
+        self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        self.solver.decay(multiplier)
+
+    def iterate(self, X,
+                Double[::1] y not None,
+                int64_t[::1] idx not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indices = X.indices
+        cdef int32_t[:] indptr = X.indptr
+        iterateBlockSparse[_SparseSGD](deref(self.solver),
+                                       X.shape[0],
+                                       X.nnz,
+                                       &indptr[0],
+                                       &indices[0],
+                                       &values[0],
+                                       &y[0],
+                                       &idx[0])
+
+    def iterate_indexed(self, X,
+                        Double[::1] y not None,
+                        int64_t[::1] idx not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indices = X.indices
+        cdef int32_t[:] indptr = X.indptr
+        iterateBlockIndexedSparse[_SparseSGD](deref(self.solver),
+                                              X.shape[0],
+                                              X.nnz,
+                                              &indptr[0],
+                                              &indices[0],
+                                              &values[0],
+                                              &y[0],
+                                              idx.shape[0],
+                                              &idx[0])
+
 
 cdef class SGDOneVsRest:
     cdef OneVsRest[_SGD]* solver

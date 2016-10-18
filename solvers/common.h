@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <Eigen/SparseCore>
 #include <iostream>
 
 namespace solvers {
@@ -21,6 +22,10 @@ using VectorMap = Eigen::Map<const Vector>;
 
 using IdxVector = Eigen::Matrix<int64_t, Eigen::Dynamic, 1>;
 using IdxVectorMap = Eigen::Map<const IdxVector>;
+
+using SpMatrix = Eigen::SparseMatrix<Double, Eigen::RowMajor>;
+using SpMatrixMap = Eigen::Map<const SpMatrix>;
+using SpVector = Eigen::SparseVector<Double, Eigen::RowMajor>;
 
 /** subtract row mean from each row in data matrix */
 inline void center(Double* const XData,

@@ -38,7 +38,7 @@ class MISO : public Solver {
 
     const Double pred = x * w_;
 
-    grad_ = Loss::computeGradient(loss_, x, pred, y);
+    Loss::computeGradient<Vector, Derived>(grad_, loss_, x, pred, y);
 
     const auto ziOld = z_.row(idx).transpose();
 

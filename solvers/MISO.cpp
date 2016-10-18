@@ -16,7 +16,9 @@ MISO::MISO(const size_t nfeatures,
     decay_(false),
     t_(1),
     t0_(1),
-    computeLB_(computeLB) {
+    computeLB_(computeLB),
+    grad_(nfeatures),
+    zi_(nfeatures) {
   if (computeLB_) {
     c_ = Vector::Zero(n_);
   }

@@ -34,12 +34,16 @@ class Solver {
     return loss_;
   }
 
-  const Vector& w() const {
+  virtual Vector& w() {
+    return w_;
+  }
+
+  virtual const Vector& w() const {
     return w_;
   }
 
   Double* wdata() {
-    return w_.data();
+    return w().data();
   }
 
   void predict(const size_t dataSize,
@@ -75,11 +79,45 @@ class Solver {
     }
   }
 
+  // for sparse data
+  template <typename SolverT>
+  static void iterateBlock(SolverT& solver,
+                           const size_t blockSize, // rows
+                           const size_t nnz,
+                           const int32_t* const Xindptr,
+                           const int32_t* const Xindices,
+                           const Double* const Xvalues,
+                           const Double* const yData,
+                           const int64_t* const idxData) {
+    const SpMatrixMap Xmap(blockSize, solver.nfeatures(), nnz,
+                           Xindptr, Xindices, Xvalues);
+    for (size_t i = 0; i < blockSize; ++i) {
+      solver.iterate(Xmap.row(i), yData[i], idxData[i]);
+    }
+  }
+
+  template <typename SolverT>
+  static void iterateBlockIndexed(SolverT& solver,
+                                  const size_t dataSize,
+                                  const size_t nnz,
+                                  const int32_t* const Xindptr,
+                                  const int32_t* const Xindices,
+                                  const Double* const Xvalues,
+                                  const Double* const yData,
+                                  const size_t blockSize,
+                                  const int64_t* const idxData) {
+    const SpMatrixMap Xmap(dataSize, solver.nfeatures(), nnz,
+                           Xindptr, Xindices, Xvalues);
+    for (size_t i = 0; i < blockSize; ++i) {
+      solver.iterate(Xmap.row(idxData[i]), yData[idxData[i]], idxData[i]);
+    }
+  }
+
  private:
   const size_t nfeatures_;
 
  protected:
-  Vector w_;
+  mutable Vector w_;
 
   const std::string loss_;
 };
