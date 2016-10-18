@@ -46,12 +46,25 @@ class Solver {
     return w().data();
   }
 
+  Double computeSquaredNorm() const {
+    return w().squaredNorm();
+  }
+
+  // for dense data
   void predict(const size_t dataSize,
                Double* const outPreds,
                const Double* const XData) const {
     const MatrixMap Xmap(XData, dataSize, nfeatures_);
     Eigen::Map<Vector> preds(outPreds, dataSize);
-    preds = Xmap * w_;
+    preds = Xmap * w();
+  }
+
+  Double computeLoss(const size_t dataSize,
+                     const Double* const XData,
+                     const Double* const yData) const {
+    Vector preds(dataSize);
+    predict(dataSize, preds.data(), XData);
+    return computeLossImpl(preds, yData);
   }
 
   template <typename SolverT>
@@ -80,6 +93,29 @@ class Solver {
   }
 
   // for sparse data
+  void predict(const size_t dataSize,
+               Double* const outPreds,
+               const size_t nnz,
+               const int32_t* const Xindptr,
+               const int32_t* const Xindices,
+               const Double* const Xvalues) const {
+    const SpMatrixMap Xmap(dataSize, nfeatures(), nnz,
+                           Xindptr, Xindices, Xvalues);
+    Eigen::Map<Vector> preds(outPreds, dataSize);
+    preds = Xmap * w();
+  }
+
+  Double computeLoss(const size_t dataSize,
+                     const size_t nnz,
+                     const int32_t* const Xindptr,
+                     const int32_t* const Xindices,
+                     const Double* const Xvalues,
+                     const Double* const yData) const {
+    Vector preds(dataSize);
+    predict(dataSize, preds.data(), nnz, Xindptr, Xindices, Xvalues);
+    return computeLossImpl(preds, yData);
+  }
+
   template <typename SolverT>
   static void iterateBlock(SolverT& solver,
                            const size_t blockSize, // rows
@@ -114,6 +150,17 @@ class Solver {
   }
 
  private:
+  Double computeLossImpl(const Vector& preds,
+                         const Double* const yData) const {
+    Double loss = 0;
+#pragma omp parallel for reduction(+:loss)
+    for (size_t i = 0; i < preds.size(); ++i) {
+      loss += Loss::computeLoss(loss_, preds(i), yData[i]);
+    }
+
+    return loss / preds.size();
+  }
+
   const size_t nfeatures_;
 
  protected:

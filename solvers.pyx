@@ -103,6 +103,10 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
         size_t t()
         size_t nfeatures()
         Double* wdata()
+        Double computeLoss(const size_t sz,
+                           const Double* const XData,
+                           const Double* const yData)
+        Double computeSquaredNorm()
 
     cdef cppclass _SparseSGD "solvers::SparseSGD":
         _SparseSGD(size_t dim, Double lr, Double lmbda, string loss)
@@ -111,6 +115,13 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
         size_t t()
         size_t nfeatures()
         Double* wdata()
+        Double computeLoss(const size_t sz,
+                           const size_t nnz,
+                           const int32_t* const Xindptr,
+                           const int32_t* const Xindices,
+                           const Double* const Xvalues,
+                           const Double* const yData)
+        Double computeSquaredNorm()
 
 
 def set_grad_sigma(Double gradSigma):
@@ -150,6 +161,12 @@ cdef class SGD:
 
     def decay(self, Double multiplier=0.5):
         self.solver.decay(multiplier)
+
+    def compute_loss(self, Double[:,::1] X not None, Double[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
 
     def iterate(self,
                 Double[:,::1] X not None,
@@ -204,13 +221,24 @@ cdef class SparseSGD:
     def decay(self, Double multiplier=0.5):
         self.solver.decay(multiplier)
 
+    def compute_loss(self, X, Double[::1] y not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        return self.solver.computeLoss(X.shape[0], X.nnz, &indptr[0],
+                                       &indices[0], &values[0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
+
     def iterate(self, X,
                 Double[::1] y not None,
                 int64_t[::1] idx not None):
         assert isinstance(X, sp.csr_matrix)
         cdef Double[:] values = X.data
-        cdef int32_t[:] indices = X.indices
         cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
         iterateBlockSparse[_SparseSGD](deref(self.solver),
                                        X.shape[0],
                                        X.nnz,
@@ -290,6 +318,10 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
         size_t nexamples()
         Double* wdata()
         Double lowerBound()
+        Double computeLoss(const size_t sz,
+                           const Double* const XData,
+                           const Double* const yData)
+        Double computeSquaredNorm()
 
 cdef class MISO:
     cdef _MISO* solver
@@ -328,6 +360,12 @@ cdef class MISO:
 
     def lower_bound(self):
         return self.solver.lowerBound()
+
+    def compute_loss(self, Double[:,::1] X not None, Double[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
 
     def iterate(self,
                 Double[:,::1] X not None,
