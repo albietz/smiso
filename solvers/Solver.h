@@ -152,9 +152,10 @@ class Solver {
  private:
   Double computeLossImpl(const Vector& preds,
                          const Double* const yData) const {
+    const size_t dataSize = preds.size();
     Double loss = 0;
 #pragma omp parallel for reduction(+:loss)
-    for (size_t i = 0; i < preds.size(); ++i) {
+    for (size_t i = 0; i < dataSize; ++i) {
       loss += Loss::computeLoss(loss_, preds(i), yData[i]);
     }
 
@@ -229,13 +230,14 @@ class OneVsRest {
     }
   }
 
+  template <typename... Args>
   void predict(const size_t dataSize,
                int32_t* const out,
-               const Double* const XData) const {
+               Args... Xargs) const {
     Matrix preds(nclasses_, dataSize);
 #pragma omp parallel for
     for (size_t c = 0; c < nclasses_; ++c) {
-      solvers_[c].predict(dataSize, preds.row(c).data(), XData);
+      solvers_[c].predict(dataSize, preds.row(c).data(), Xargs...);
     }
 
 #pragma omp parallel for
@@ -259,7 +261,23 @@ class OneVsRest {
     for (size_t c = 0; c < nclasses_; ++c) {
       solvers_[c].predict(dataSize, preds.row(c).data(), XData);
     }
+    return computeLossImpl(preds, yData);
+  }
 
+  Double computeSquaredNorm() const {
+    Double res = 0;
+#pragma omp parallel for reduction(+:res)
+    for (size_t c = 0; c < nclasses_; ++c) {
+      res += solvers_[c].w().squaredNorm();
+    }
+
+    return res;
+  }
+
+ private:
+  Double computeLossImpl(const Matrix& preds,
+                         const int32_t* const yData) const {
+    const size_t dataSize = preds.cols();
     Double loss = 0;
 #pragma omp parallel for reduction(+:loss)
     for (size_t i = 0; i < dataSize; ++i) {
@@ -275,17 +293,6 @@ class OneVsRest {
     return loss / dataSize;
   }
 
-  Double computeSquaredNorm() const {
-    Double res = 0;
-#pragma omp parallel for reduction(+:res)
-    for (size_t c = 0; c < nclasses_; ++c) {
-      res += solvers_[c].w().squaredNorm();
-    }
-
-    return res;
-  }
-
- private:
   const size_t nclasses_;
 
   std::vector<SolverT> solvers_;
