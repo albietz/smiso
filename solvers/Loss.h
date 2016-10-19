@@ -42,7 +42,7 @@ class Loss {
       const Double hinge = std::max(0.0, 1.0 - s);
       return 0.5 * hinge * hinge;
     } else {
-      std::cerr << "loss not supported: " << loss;
+      LOG(ERROR) << "loss not supported: " << loss;
       return 0;
     }
   }
@@ -66,7 +66,7 @@ class Loss {
         g = (y > 0 ? -1 : 1) * (1.0 - s) * x.transpose();
       }
     } else {
-      std::cerr << "loss not supported: " << loss;
+      LOG(ERROR) << "loss not supported: " << loss;
     }
 
     if (gradSigma_ > 0) {
@@ -78,7 +78,7 @@ class Loss {
   }
 
   static void setGradSigma(const Double gradSigma) {
-    std::cerr << "setting gradient std dev to " << gradSigma << std::endl;
+    LOG(INFO) << "setting gradient std dev to " << gradSigma;
     gradSigma_ = gradSigma;
   }
 

@@ -3,6 +3,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
+#include <glog/logging.h>
 #include <iostream>
 
 namespace solvers {
@@ -19,6 +20,8 @@ using MatrixMap = Eigen::Map<const Matrix>;
 
 using Vector = Eigen::Matrix<Double, Eigen::Dynamic, 1>;
 using VectorMap = Eigen::Map<const Vector>;
+using RowVector = Eigen::Matrix<Double, 1, Eigen::Dynamic, Eigen::RowMajor>;
+using RowVectorMap = Eigen::Map<const RowVector>;
 
 using IdxVector = Eigen::Matrix<int64_t, Eigen::Dynamic, 1>;
 using IdxVectorMap = Eigen::Map<const IdxVector>;

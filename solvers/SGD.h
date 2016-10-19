@@ -110,7 +110,7 @@ class SparseSGD : public SGDBase {
 
     // for numerical stability
     if (s_ < 1e-9) {
-      std::cout << "resetting ws and s" << std::endl;
+      LOG(INFO) << "resetting ws and s" << std::endl;
       ws_ = s_ * ws_;
       s_ = 1.0;
     }
