@@ -25,7 +25,7 @@ using IdxVectorMap = Eigen::Map<const IdxVector>;
 
 using SpMatrix = Eigen::SparseMatrix<Double, Eigen::RowMajor>;
 using SpMatrixMap = Eigen::Map<const SpMatrix>;
-using SpVector = Eigen::SparseVector<Double, Eigen::RowMajor>;
+using SpVector = Eigen::SparseVector<Double>;
 
 /** subtract row mean from each row in data matrix */
 inline void center(Double* const XData,

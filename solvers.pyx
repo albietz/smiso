@@ -323,6 +323,28 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
                            const Double* const yData)
         Double computeSquaredNorm()
 
+    cdef cppclass _SparseMISO "solvers::SparseMISO":
+        _SparseMISO(size_t dim, size_t n, Double lmbda, string loss, bool computeLB)
+        void startDecay()
+        void decay(Double mult)
+        size_t t()
+        size_t nfeatures()
+        size_t nexamples()
+        Double* wdata()
+        Double lowerBound()
+        Double computeLoss(const size_t sz,
+                           const size_t nnz,
+                           const int32_t* const Xindptr,
+                           const int32_t* const Xindices,
+                           const Double* const Xvalues,
+                           const Double* const yData)
+        Double computeSquaredNorm()
+        void initZ(
+                           const size_t nnz,
+                           const int32_t* const Xindptr,
+                           const int32_t* const Xindices,
+                           const Double* const Xvalues)
+
 cdef class MISO:
     cdef _MISO* solver
 
@@ -387,6 +409,97 @@ cdef class MISO:
                                    &y[0],
                                    idx.shape[0],
                                    &idx[0])
+
+
+cdef class SparseMISO:
+    cdef _SparseMISO* solver
+
+    def __cinit__(self, size_t dim, size_t n,
+                  Double lmbda=0.1, string loss="logistic", bool compute_lb=False):
+        self.solver = new _SparseMISO(dim, n, lmbda, loss, compute_lb)
+
+    def __dealloc__(self):
+        del self.solver
+
+    property nfeatures:
+        def __get__(self):
+            return self.solver.nfeatures()
+
+    property nexamples:
+        def __get__(self):
+            return self.solver.nexamples()
+
+    property w:
+        def __get__(self):
+            cdef np.npy_intp shape[1]
+            shape[0] = self.nfeatures
+            cdef np.ndarray[Double, ndim=1] arr = \
+                np.PyArray_SimpleNewFromData(1, shape, npDOUBLE,
+                                             self.solver.wdata())
+            Py_INCREF(self)
+            PyArray_SetBaseObject(arr, <PyObject*>self)
+            return arr
+
+    def start_decay(self):
+        self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        self.solver.decay(multiplier)
+
+    def lower_bound(self):
+        return self.solver.lowerBound()
+
+    def init_z(self, X):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        return self.solver.initZ(X.nnz, &indptr[0],
+                                       &indices[0], &values[0])
+
+    def compute_loss(self, X, Double[::1] y not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        return self.solver.computeLoss(X.shape[0], X.nnz, &indptr[0],
+                                       &indices[0], &values[0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
+
+    def iterate(self, X,
+                Double[::1] y not None,
+                int64_t[::1] idx not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        iterateBlockSparse[_SparseMISO](deref(self.solver),
+                                        X.shape[0],
+                                        X.nnz,
+                                        &indptr[0],
+                                        &indices[0],
+                                        &values[0],
+                                        &y[0],
+                                        &idx[0])
+
+    def iterate_indexed(self, X,
+                        Double[::1] y not None,
+                        int64_t[::1] idx not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indices = X.indices
+        cdef int32_t[:] indptr = X.indptr
+        iterateBlockIndexedSparse[_SparseMISO](deref(self.solver),
+                                               X.shape[0],
+                                               X.nnz,
+                                               &indptr[0],
+                                               &indices[0],
+                                               &values[0],
+                                               &y[0],
+                                               idx.shape[0],
+                                               &idx[0])
 
 
 cdef class MISOOneVsRest:
