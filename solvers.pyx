@@ -472,6 +472,8 @@ cdef class SparseMISO:
                 Double[::1] y not None,
                 int64_t[::1] idx not None):
         assert isinstance(X, sp.csr_matrix)
+        assert X.has_sorted_indices, "The Sparse MISO implementation requires sorted indices." \
+                "Use X.sort_indices() to sort them."
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices

@@ -155,6 +155,7 @@ class SparseMISONaive : public MISOBase {
 // optimized sparse implementation which requires that examples have the same
 // sparsity pattern for any fixed idx as that given during initialization.
 // Initialization with a full data matrix using initZ is required.
+// Indices in each CSR row vector need to be sorted.
 class SparseMISO : public MISOBase {
  public:
   SparseMISO(const size_t nfeatures,
@@ -177,6 +178,7 @@ class SparseMISO : public MISOBase {
     const Double pred = x * w_;
 
     // [hacky] retrieve original sparse matrix from the view x
+    // assumes that x was passed as a block of a sparse matrix
     const auto& Xblock = x.derived();
     const auto& X = Xblock.nestedExpression();
     const size_t sz = z_.outerIndexPtr()[idx + 1] - z_.outerIndexPtr()[idx];
@@ -187,10 +189,8 @@ class SparseMISO : public MISOBase {
         << "size mismatch in sparse value arrays! Did you call initZ?";
       return;
     }
-    RowVectorMap xMap(
-        X.valuePtr() + X.outerIndexPtr()[xRow], sz);
-    Eigen::Map<Vector> zMap(
-        z_.valuePtr() + z_.outerIndexPtr()[idx], sz);
+    RowVectorMap xMap(X.valuePtr() + X.outerIndexPtr()[xRow], sz);
+    Eigen::Map<Vector> zMap(z_.valuePtr() + z_.outerIndexPtr()[idx], sz);
 
     grad_.resize(sz);
     Loss::computeGradient<Vector, RowVectorMap>(grad_, loss_, xMap, pred, y);
