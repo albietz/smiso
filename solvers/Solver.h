@@ -283,9 +283,9 @@ class OneVsRest {
     for (size_t i = 0; i < dataSize; ++i) {
       Double l = 0;
       for (size_t c = 0; c < nclasses_; ++c) {
-        l += Loss::computeLoss(solvers_[0].loss(),
-                               preds(c, i),
-                               static_cast<Double>(yData[i] == static_cast<int32_t>(c)));
+        l += Loss::computeLoss(
+            solvers_[0].loss(), preds(c, i),
+            static_cast<Double>(yData[i] == static_cast<int32_t>(c)));
       }
       loss += l;
     }

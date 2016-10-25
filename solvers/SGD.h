@@ -4,7 +4,6 @@
 #include <string>
 
 #include "common.h"
-#include "Loss.h"
 #include "Solver.h"
 
 namespace solvers {
@@ -49,24 +48,12 @@ class SGD : public SGDBase {
   SGD(const size_t nfeatures,
       const Double lr,
       const Double lambda,
-      const std::string& loss)
-    : SGDBase(nfeatures, lr, lambda, loss),
-      grad_(nfeatures) {
-  }
+      const std::string& loss);
 
   template <typename Derived>
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
                const Double y,
-               const size_t idx) {
-    const Double stepSize = getStepSize();
-
-    Loss::computeGradient<Vector, Derived>(grad_, loss_, x, x * w_, y);
-
-    // SGD update
-    w_ = w_ - stepSize * (grad_ + lambda_ * w_);
-
-    ++t_;
-  }
+               const size_t idx);
 
  private:
   Vector grad_;
@@ -77,12 +64,7 @@ class SparseSGD : public SGDBase {
   SparseSGD(const size_t nfeatures,
             const Double lr,
             const Double lambda,
-            const std::string& loss)
-    : SGDBase(nfeatures, lr, lambda, loss),
-      ws_(Vector::Zero(nfeatures)),
-      s_(1.0),
-      grad_(nfeatures) {
-  }
+            const std::string& loss);
 
   Vector& w() {
     updateW();
@@ -97,24 +79,7 @@ class SparseSGD : public SGDBase {
   template <typename Derived>
   void iterate(const Eigen::SparseMatrixBase<Derived>& x, // x is a row vector
                const Double y,
-               const size_t idx) {
-    const Double stepSize = getStepSize();
-
-    Loss::computeGradient<SpVector, Derived>(
-        grad_, loss_, x, s_ * static_cast<Double>(x * ws_), y);
-
-    s_ *= (1 - stepSize * lambda_);
-    ws_ -= (stepSize / s_) * grad_;
-
-    ++t_;
-
-    // for numerical stability
-    if (s_ < 1e-9) {
-      LOG(INFO) << "resetting ws and s" << std::endl;
-      ws_ = s_ * ws_;
-      s_ = 1.0;
-    }
-  }
+               const size_t idx);
 
  private:
   void updateW() const {
@@ -128,3 +93,5 @@ class SparseSGD : public SGDBase {
   SpVector grad_;
 };
 }
+
+#include "SGD-inl.h"
