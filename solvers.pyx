@@ -549,6 +549,8 @@ cdef class MISOOneVsRest:
 cdef extern from "solvers/SAGA.h" namespace "solvers":
     cdef cppclass _SAGA "solvers::SAGA":
         _SAGA(size_t dim, size_t n, Double lr, Double lmbda, string loss)
+        void startDecay()
+        void decay(Double mult)
         size_t t()
         size_t nfeatures()
         size_t nexamples()
@@ -589,10 +591,10 @@ cdef class SAGA:
             return arr
 
     def start_decay(self):
-        pass  # self.solver.startDecay()
+        self.solver.startDecay()
 
     def decay(self, Double multiplier=0.5):
-        pass  # self.solver.decay(multiplier)
+        self.solver.decay(multiplier)
 
     def compute_loss(self, Double[:,::1] X not None, Double[::1] y not None):
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])

@@ -8,7 +8,19 @@ SAGABase::SAGABase(const size_t nfeatures,
                    const Double lr,
                    const Double lambda,
                    const std::string& loss)
-  : Solver(nfeatures, loss), n_(nexamples), lr_(lr), lambda_(lambda), t_(1) {
+  : Solver(nfeatures, loss),
+    n_(nexamples),
+    lr_(lr),
+    lambda_(lambda),
+    decay_(false),
+    t_(1),
+    t0_(1) {
+}
+
+void SAGABase::startDecay() {
+  decay_ = true;
+  t0_ = t_;
+  gamma_ = static_cast<size_t>(2.0 / (lambda_ * lr_)) + 1;
 }
 
 SAGA::SAGA(const size_t nfeatures,
