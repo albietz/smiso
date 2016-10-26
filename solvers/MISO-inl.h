@@ -1,5 +1,6 @@
 
 #include "Loss.h"
+#include "Util.h"
 
 namespace solvers {
 
@@ -69,18 +70,17 @@ void SparseMISO::iterate(
   // assumes that x was passed as a block of a sparse matrix
   const auto& Xblock = x.derived();
   const auto& X = Xblock.nestedExpression();
-  const size_t sz = z_.outerIndexPtr()[idx + 1] - z_.outerIndexPtr()[idx];
-  const size_t xRow = Xblock.startRow();
-  if (static_cast<size_t>(X.outerIndexPtr()[xRow + 1] -
-                          X.outerIndexPtr()[xRow]) != sz) {
+  RowVectorMap xMap = Util::denseRowMap<RowVector>(X, Xblock.startRow());
+  auto zMap = Util::denseRowMap<Vector>(z_, idx);
+  if (xMap.size() != zMap.size()) {
     LOG_EVERY_N(ERROR, 1000)
-        << "size mismatch in sparse value arrays! Did you call initZ?";
+        << "size mismatch in sparse value arrays! ("
+        << xMap.size() << " vs " << zMap.size()
+        << ") Did you call initZ?";
     return;
   }
-  RowVectorMap xMap(X.valuePtr() + X.outerIndexPtr()[xRow], sz);
-  Eigen::Map<Vector> zMap(z_.valuePtr() + z_.outerIndexPtr()[idx], sz);
 
-  grad_.resize(sz);
+  grad_.resize(xMap.size());
   Loss::computeGradient<Vector, RowVectorMap>(grad_, loss_, xMap, pred, y);
 
   ziOld_ = z_.row(idx).transpose();
