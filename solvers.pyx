@@ -544,3 +544,121 @@ cdef class MISOOneVsRest:
 
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
+
+
+cdef extern from "solvers/SAGA.h" namespace "solvers":
+    cdef cppclass _SAGA "solvers::SAGA":
+        _SAGA(size_t dim, size_t n, Double lr, Double lmbda, string loss)
+        size_t t()
+        size_t nfeatures()
+        size_t nexamples()
+        Double* wdata()
+        Double computeLoss(const size_t sz,
+                           const Double* const XData,
+                           const Double* const yData)
+        Double computeSquaredNorm()
+
+
+cdef class SAGA:
+    cdef _SAGA* solver
+
+    def __cinit__(self, size_t dim, size_t n, Double lr=1.0,
+                  Double lmbda=0.1, string loss="logistic"):
+        self.solver = new _SAGA(dim, n, lr, lmbda, loss)
+
+    def __dealloc__(self):
+        del self.solver
+
+    property nfeatures:
+        def __get__(self):
+            return self.solver.nfeatures()
+
+    property nexamples:
+        def __get__(self):
+            return self.solver.nexamples()
+
+    property w:
+        def __get__(self):
+            cdef np.npy_intp shape[1]
+            shape[0] = self.nfeatures
+            cdef np.ndarray[Double, ndim=1] arr = \
+                np.PyArray_SimpleNewFromData(1, shape, npDOUBLE,
+                                             self.solver.wdata())
+            Py_INCREF(self)
+            PyArray_SetBaseObject(arr, <PyObject*>self)
+            return arr
+
+    def start_decay(self):
+        pass  # self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        pass  # self.solver.decay(multiplier)
+
+    def compute_loss(self, Double[:,::1] X not None, Double[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
+
+    def iterate(self,
+                Double[:,::1] X not None,
+                Double[::1] y not None,
+                int64_t[::1] idx not None):
+        iterateBlock[_SAGA](deref(self.solver),
+                            X.shape[0],
+                            &X[0,0],
+                            &y[0],
+                            &idx[0])
+
+    def iterate_indexed(self,
+                        Double[:,::1] X not None,
+                        Double[::1] y not None,
+                        int64_t[::1] idx not None):
+        iterateBlockIndexed[_SAGA](deref(self.solver),
+                                   X.shape[0],
+                                   &X[0,0],
+                                   &y[0],
+                                   idx.shape[0],
+                                   &idx[0])
+
+
+cdef class SAGAOneVsRest:
+    cdef OneVsRest[_SAGA]* solver
+
+    def __cinit__(self, size_t nclasses, size_t dim, size_t n, Double lr=1.0,
+                  Double lmbda=0.1, string loss="logistic"):
+        self.solver = new OneVsRest[_SAGA](nclasses, dim, n, lr, lmbda, loss)
+
+    def __dealloc__(self):
+        del self.solver
+
+    def start_decay(self):
+        pass  # self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        pass  # self.solver.decay(multiplier)
+
+    def iterate(self,
+                Double[:,::1] X not None,
+                int32_t[::1] y not None,
+                int64_t[::1] idx not None):
+        self.solver.iterateBlock(X.shape[0], &X[0,0], &y[0], &idx[0])
+
+    def iterate_indexed(self,
+                        Double[:,::1] X not None,
+                        int32_t[::1] y not None,
+                        int64_t[::1] idx not None):
+        self.solver.iterateBlockIndexed(
+                X.shape[0], &X[0,0], &y[0], idx.shape[0], &idx[0])
+
+    def predict(self, Double[:,::1] X not None):
+        preds = np.empty(X.shape[0], dtype=np.int32)
+        cdef int32_t[:] out = preds
+        self.solver.predict(out.shape[0], &out[0], &X[0,0])
+        return preds
+
+    def compute_loss(self, Double[:,::1] X not None, int32_t[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
