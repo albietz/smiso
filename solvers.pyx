@@ -75,6 +75,14 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
             const size_t blockSize,
             const int64_t* const idxData) nogil
 
+    void initFromX "solvers::Solver::initFromX"[SolverT](
+            SolverT& solver,
+            const size_t dataSize,
+            const size_t nnz,
+            const int32_t* const Xindptr,
+            const int32_t* const Xindices,
+            const Double* const Xvalues)
+
     cdef cppclass OneVsRest[SolverT]:
         OneVsRest(size_t nclasses, ...)
         size_t nclasses()
@@ -339,11 +347,6 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
                            const Double* const Xvalues,
                            const Double* const yData)
         Double computeSquaredNorm()
-        void initZ(
-                           const size_t nnz,
-                           const int32_t* const Xindptr,
-                           const int32_t* const Xindices,
-                           const Double* const Xvalues)
 
 cdef class MISO:
     cdef _MISO* solver
@@ -449,13 +452,13 @@ cdef class SparseMISO:
     def lower_bound(self):
         return self.solver.lowerBound()
 
-    def init_z(self, X):
+    def init(self, X):
         assert isinstance(X, sp.csr_matrix)
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        return self.solver.initZ(X.nnz, &indptr[0],
-                                       &indices[0], &values[0])
+        return initFromX[_SparseMISO](deref(self.solver), X.shape[0], X.nnz, &indptr[0],
+                                      &indices[0], &values[0])
 
     def compute_loss(self, X, Double[::1] y not None):
         assert isinstance(X, sp.csr_matrix)

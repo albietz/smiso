@@ -149,6 +149,18 @@ class Solver {
     }
   }
 
+  template <typename SolverT>
+  static void initFromX(SolverT& solver,
+                        const size_t dataSize,
+                        const size_t nnz,
+                        const int32_t* const Xindptr,
+                        const int32_t* const Xindices,
+                        const Double* const Xvalues) {
+    const SpMatrixMap Xmap(
+        dataSize, solver.nfeatures(), nnz, Xindptr, Xindices, Xvalues);
+    solver.initFromX(Xmap);
+  }
+
  private:
   Double computeLossImpl(const Vector& preds,
                          const Double* const yData) const {

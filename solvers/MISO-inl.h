@@ -31,6 +31,15 @@ void MISO::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
 }
 
 template <typename Derived>
+void SparseMISONaive::initFromX(const Eigen::SparseMatrixBase<Derived>& X) {
+  // this didn't seem to help much, even hurts
+  // later iterations compared to just reserve(nnz)
+  // z_ = 0.0 * X;
+
+  z_.reserve(X.nonZeros());
+}
+
+template <typename Derived>
 void SparseMISONaive::iterate(
     const Eigen::SparseMatrixBase<Derived>& x, // x is a row vector
     const Double y,
@@ -55,6 +64,11 @@ void SparseMISONaive::iterate(
   z_.row(idx) = zi_.transpose();
 
   ++t_;
+}
+
+template <typename Derived>
+void SparseMISO::initFromX(const Eigen::SparseMatrixBase<Derived>& X) {
+  z_ = 0.0 * X;
 }
 
 template <typename Derived>

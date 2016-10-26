@@ -62,19 +62,6 @@ SparseMISONaive::SparseMISONaive(const size_t nfeatures,
     zi_(nfeatures) {
 }
 
-void SparseMISONaive::initZ(const size_t nnz,
-                            const int32_t* const Xindptr,
-                            const int32_t* const Xindices,
-                            const Double* const Xvalues) {
-  // this didn't seem to help much, even hurts
-  // later iterations compared to just reserve(nnz)
-  // const SpMatrixMap Xmap(n_, nfeatures(), nnz,
-  //                        Xindptr, Xindices, Xvalues);
-  // z_ = 0.0 * Xmap;
-
-  z_.reserve(nnz);
-}
-
 Double SparseMISONaive::lowerBound() const {
   if (computeLB_) {
     return (c_ - lambda_ * z_ * w_).mean() + 0.5 * lambda_ * w_.squaredNorm();
@@ -91,14 +78,6 @@ SparseMISO::SparseMISO(const size_t nfeatures,
                        const bool computeLB)
   : MISOBase(nfeatures, nexamples, lambda, loss, computeLB),
     z_(nexamples, nfeatures) {
-}
-
-void SparseMISO::initZ(const size_t nnz,
-                       const int32_t* const Xindptr,
-                       const int32_t* const Xindices,
-                       const Double* const Xvalues) {
-  const SpMatrixMap Xmap(n_, nfeatures(), nnz, Xindptr, Xindices, Xvalues);
-  z_ = 0.0 * Xmap;
 }
 
 Double SparseMISO::lowerBound() const {

@@ -89,10 +89,8 @@ class SparseMISONaive : public MISOBase {
                   const std::string& loss,
                   const bool computeLB);
 
-  void initZ(const size_t nnz,
-             const int32_t* const Xindptr,
-             const int32_t* const Xindices,
-             const Double* const Xvalues);
+  template <typename Derived>
+  void initFromX(const Eigen::SparseMatrixBase<Derived>& X);
 
   template <typename Derived>
   void iterate(const Eigen::SparseMatrixBase<Derived>& x, // x is a row vector
@@ -111,7 +109,7 @@ class SparseMISONaive : public MISOBase {
 
 // optimized sparse implementation which requires that examples have the same
 // sparsity pattern for any fixed idx as that given during initialization.
-// Initialization with a full data matrix using initZ is required.
+// Initialization with a full data matrix using initFromX is required.
 // Indices in each CSR row vector need to be sorted.
 class SparseMISO : public MISOBase {
  public:
@@ -121,10 +119,8 @@ class SparseMISO : public MISOBase {
              const std::string& loss,
              const bool computeLB);
 
-  void initZ(const size_t nnz,
-             const int32_t* const Xindptr,
-             const int32_t* const Xindices,
-             const Double* const Xvalues);
+  template <typename Derived>
+  void initFromX(const Eigen::SparseMatrixBase<Derived>& X);
 
   template <typename Derived>
   void iterate(const Eigen::SparseMatrixBase<Derived>& x, // x is a row vector
