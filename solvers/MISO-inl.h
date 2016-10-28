@@ -90,7 +90,7 @@ void SparseMISO::iterate(
     LOG_EVERY_N(ERROR, 1000)
         << "size mismatch in sparse value arrays! ("
         << xMap.size() << " vs " << zMap.size()
-        << ") Did you call initZ?";
+        << ") Did you call init?";
     return;
   }
 

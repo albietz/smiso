@@ -34,7 +34,7 @@ void SparseSGD::iterate(
 
   // for numerical stability
   if (s_ < 1e-9) {
-    LOG(INFO) << "resetting ws and s" << std::endl;
+    LOG(INFO) << "resetting ws and s";
     ws_ = s_ * ws_;
     s_ = 1.0;
   }

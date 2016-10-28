@@ -561,6 +561,20 @@ cdef extern from "solvers/SAGA.h" namespace "solvers":
                            const Double* const yData)
         Double computeSquaredNorm()
 
+    cdef cppclass _SparseSAGA "solvers::SparseSAGA":
+        _SparseSAGA(size_t dim, size_t n, Double lr, Double lmbda, string loss)
+        size_t t()
+        size_t nfeatures()
+        size_t nexamples()
+        Double* wdata()
+        Double computeLoss(const size_t sz,
+                           const size_t nnz,
+                           const int32_t* const Xindptr,
+                           const int32_t* const Xindices,
+                           const Double* const Xvalues,
+                           const Double* const yData)
+        Double computeSquaredNorm()
+
 
 cdef class SAGA:
     cdef _SAGA* solver
@@ -625,6 +639,94 @@ cdef class SAGA:
                                    &idx[0])
 
 
+cdef class SparseSAGA:
+    cdef _SparseSAGA* solver
+
+    def __cinit__(self, size_t dim, size_t n, Double lr=1.0,
+                  Double lmbda=0.1, string loss="logistic"):
+        self.solver = new _SparseSAGA(dim, n, lr, lmbda, loss)
+
+    def __dealloc__(self):
+        del self.solver
+
+    property nfeatures:
+        def __get__(self):
+            return self.solver.nfeatures()
+
+    property nexamples:
+        def __get__(self):
+            return self.solver.nexamples()
+
+    property w:
+        def __get__(self):
+            cdef np.npy_intp shape[1]
+            shape[0] = self.nfeatures
+            cdef np.ndarray[Double, ndim=1] arr = \
+                np.PyArray_SimpleNewFromData(1, shape, npDOUBLE,
+                                             self.solver.wdata())
+            Py_INCREF(self)
+            PyArray_SetBaseObject(arr, <PyObject*>self)
+            return arr
+
+    def init(self, X):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        return initFromX[_SparseSAGA](deref(self.solver), X.shape[0], X.nnz, &indptr[0],
+                                      &indices[0], &values[0])
+
+    def start_decay(self):
+        pass  # self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        pass  # self.solver.decay(multiplier)
+
+    def compute_loss(self, X, Double[::1] y not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        return self.solver.computeLoss(X.shape[0], X.nnz, &indptr[0],
+                                       &indices[0], &values[0], &y[0])
+
+    def compute_squared_norm(self):
+        return self.solver.computeSquaredNorm()
+
+    def iterate(self, X,
+                Double[::1] y not None,
+                int64_t[::1] idx not None):
+        assert isinstance(X, sp.csr_matrix)
+        assert X.has_sorted_indices, "The Sparse SAGA implementation requires sorted indices." \
+                "Use X.sort_indices() to sort them."
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indptr = X.indptr
+        cdef int32_t[:] indices = X.indices
+        iterateBlockSparse[_SparseSAGA](deref(self.solver),
+                                        X.shape[0],
+                                        X.nnz,
+                                        &indptr[0],
+                                        &indices[0],
+                                        &values[0],
+                                        &y[0],
+                                        &idx[0])
+
+    def iterate_indexed(self, X,
+                        Double[::1] y not None,
+                        int64_t[::1] idx not None):
+        assert isinstance(X, sp.csr_matrix)
+        cdef Double[:] values = X.data
+        cdef int32_t[:] indices = X.indices
+        cdef int32_t[:] indptr = X.indptr
+        iterateBlockIndexedSparse[_SparseSAGA](deref(self.solver),
+                                               X.shape[0],
+                                               X.nnz,
+                                               &indptr[0],
+                                               &indices[0],
+                                               &values[0],
+                                               &y[0],
+                                               idx.shape[0],
+                                               &idx[0])
 cdef class SAGAOneVsRest:
     cdef OneVsRest[_SAGA]* solver
 
