@@ -32,9 +32,14 @@ class Loss {
                             const Double pred,
                             const Double y);
 
+  static Double computeGradient(const std::string& loss,
+                                const Double pred,
+                                const Double y);
+
   template <typename VectorT, typename Derived>
   static void computeGradient(VectorT& g,
                               const std::string& loss,
+                              // x is a row vector
                               const detail::EBase<Derived, VectorT>& x,
                               const Double pred,
                               const Double y);
