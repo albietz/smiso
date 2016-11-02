@@ -66,4 +66,27 @@ inline void normalize(Double* const XData,
     }
   }
 }
+
+/** L2 normalize, sparse */
+inline void normalize(const size_t rows,
+                      const size_t cols,
+                      const size_t nnz,
+                      const int32_t* const indptr,
+                      const int32_t* const indices,
+                      Double* const values) {
+#pragma omp parallel for
+  for (size_t r = 0; r < rows; ++r) {
+    Double sum = 0;
+    for (int32_t idx = indptr[r]; idx < indptr[r + 1]; ++idx) {
+      Double x = values[idx];
+      sum += x * x;
+    }
+    sum = std::sqrt(sum);
+    if (sum > 0) {
+      for (int32_t idx = indptr[r]; idx < indptr[r + 1]; ++idx) {
+        values[idx] /= sum;
+      }
+    }
+  }
+}
 }

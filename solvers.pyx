@@ -27,15 +27,32 @@ cdef extern from "numpy/arrayobject.h":
 
 cdef extern from "solvers/common.h" namespace "solvers":
     void _center "solvers::center"(
-        Double* const XData, const size_t rows, const size_t cols)
+        Double* const XData, const size_t rows, const size_t cols) nogil
     void _normalize "solvers::normalize"(
-        Double* const XData, const size_t rows, const size_t cols)
+        Double* const XData, const size_t rows, const size_t cols) nogil
+    void _normalizeSparse "solvers::normalize"(
+        const size_t rows, const size_t cols, const size_t nnz,
+        const int32_t* const indptr, const int32_t* const indices,
+        Double* const values) nogil
 
 def center(Double[:,::1] X not None):
     _center(&X[0,0], X.shape[0], X.shape[1])
 
-def normalize(Double[:,::1] X not None):
+def normalize_dense(Double[:,::1] X not None):
     _normalize(&X[0,0], X.shape[0], X.shape[1])
+
+def normalize_sparse(X):
+    cdef Double[:] values = X.data
+    cdef int32_t[:] indptr = X.indptr
+    cdef int32_t[:] indices = X.indices
+    _normalizeSparse(X.shape[0], X.shape[1], X.nnz,
+                     &indptr[0], &indices[0], &values[0])
+
+def normalize(X):
+    if isinstance(X, sp.csr_matrix):
+        normalize_sparse(X)
+    else:
+        normalize_dense(X)
 
 cdef extern from "solvers/Solver.h" namespace "solvers":
     void iterateBlock "solvers::Solver::iterateBlock"[SolverT](
