@@ -107,7 +107,7 @@ if __name__ == '__main__':
                 data = stl10_input.load_train_val_white(fold)
             model = stl10_input.load_ckn_layers_whitened()
             expt_params = stl10_input.params()
-            augm_fn = stl10_input.augmentation_pad
+            augm_fn = stl10_input.augmentation
         else:
             print('experiment', args.experiment, 'not supported!')
             sys.exit(0)
@@ -212,7 +212,14 @@ if __name__ == '__main__':
             solver_params.append(dict(name='miso_onevsrest', lmbda=lmbda, loss=loss, lr=lr))
             # adjust miso step-size if needed (with L == 1)
             if loss in [b'logistic', b'squared_hinge']:
-                solver_list[-1].decay(lr * min(1, lmbda * n / (1 - lmbda)))
+                solver_list[-1].decay(lr * min(1, lmbda * n))
+
+        saga_lrs = expt_params.get('saga_lrs', [1])
+        print('saga lrs:', saga_lrs)
+        for lr in saga_lrs:
+            solver_list.append(solvers.SAGAOneVsRest(n_classes, dim, n,
+                                                     lr=lr, lmbda=lmbda, loss=loss))
+            solver_params.append(dict(name='saga_onevsrest', lmbda=lmbda, loss=loss, lr=lr))
 
         lrs = expt_params['lrs']
         print('lrs:', lrs)

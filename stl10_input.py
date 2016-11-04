@@ -15,11 +15,12 @@ def params():
     return {
         'n_classes': 10,
         # 'lmbda': [0.01, 1e-4, 1e-6, 1e-8],
-        'lmbda': [1e-3, 1e-5],
-        'lrs': [0.1, 0.5, 1.0],
-        'miso_lrs': [0.1, 0.5, 1.0],
+        'lmbda': [1e-2, 1e-3, 1e-4, 1e-5, 1e-6],
+        'lrs': [0.1, 1.0],
+        'miso_lrs': [0.1, 1.0],
+        'saga_lrs': [0.1, 1.0],
         'results_root': os.path.join(MODEL_DIR, 'accs'),
-        'ckn_batch_size': 32,
+        'ckn_batch_size': 64,
         'encode_size': 4000,
     }
 
@@ -113,7 +114,7 @@ def fold_idxs(fold):
 def augmentation(image, sz=96):
     image = tf.image.resize_image_with_crop_or_pad(image, sz+8, sz+8)
     offset = tf.random_uniform([1], maxval=16, dtype=tf.int32)[0]
-    image = tf.random_crop(image, size=[sz-offset, sz-offset, 3])
+    image = tf.random_crop(image, size=[sz+8-offset, sz+8-offset, 3])
     image = tf.image.resize_images(image, sz, sz)
     image.set_shape([sz, sz, 3])
     return image
