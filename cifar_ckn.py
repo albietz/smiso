@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import pickle
 import sys
@@ -15,6 +16,53 @@ import mnist_input
 import stl10_input
 
 ENCODE_SIZE = 50000
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__file__)
+
+def get_mc_augmented_training_set(experiment, data, augm_fn, mc_samples,
+                                  model_type, model_params):
+    '''Compute augmented training set for evaluating training loss.'''
+    logger.info('computing augmented training set for evaluation')
+
+    if experiment == 'infimnist':
+        idxs = np.hstack([10000 + i * 60000 + np.arange(args.num_examples)
+                          for i in range(args.num_transformations)])
+        idxs = np.arange(10000, 10000 + mc_samples * 60000)
+        from infimnist._infimnist import InfimnistGenerator
+        images, labels = InfimnistGenerator().gen(idxs)
+        images = images.astype(np.float32).reshape(-1, 1, 28, 28) / 255
+        labels = labels.astype(np.int32)
+
+    else:
+        num_images = data[0].shape[0] * mc_samples
+        with tf.device('/cpu:0'):
+            ds = dataset.Dataset(data, augmentation=True, augm_fn=augm_fn,
+                                 batch_size=num_images, capacity=num_images,
+                                 producer_type='epoch')
+        with tf.Session() as sess:
+            coord = tf.train.Coordinator()
+            ds.init(sess, coord)
+            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+            images, labels = sess.run([ds.images, ds.labels])
+
+            print('hello', images.shape, labels.shape)
+            coord.request_stop()
+            coord.join(threads)
+            ds.close(sess, coord)
+
+    if model_type == 'ckn':
+        import _ckn_cuda as ckn
+        cuda_device = model_params['cuda_devices'][0]
+        N, C, H, W = images.shape
+        X = ckn.encode_cudnn(np.ascontiguousarray(images.reshape(N, C*H, W)), model_params['layers'],
+                             cuda_device, model_params['ckn_batch_size'])
+    elif model_type == 'scattering':
+        X = model_params['encoder'].encode_nchw(images)
+
+    return X, labels
+
 
 
 if __name__ == '__main__':
@@ -69,11 +117,14 @@ if __name__ == '__main__':
       default=False,
       action='store_true',
       help='whether to compute train/test losses')
+    parser.add_argument('--eval-mc-samples',
+      default=0, type=int,
+      help='number of Monte Carlo samples used for computing training loss')
 
     args = parser.parse_args()
     print('experiment:', args.experiment, 'model-type:', args.model_type,
-           'augmentation:', args.augmentation, 'normalize:', args.normalize,
-           'no-decay:', args.no_decay)
+          'augmentation:', args.augmentation, 'normalize:', args.normalize,
+          'no-decay:', args.no_decay)
 
     if not args.no_decay:
         print('decay starts in epoch', args.start_decay_epoch)
@@ -109,7 +160,7 @@ if __name__ == '__main__':
             expt_params = stl10_input.params()
             augm_fn = stl10_input.augmentation
         else:
-            print('experiment', args.experiment, 'not supported!')
+            logger.error('experiment {} not supported!'.format(args.experiment))
             sys.exit(0)
 
         cuda_devices = list(map(int, args.cuda_devices.split()))
@@ -145,20 +196,28 @@ if __name__ == '__main__':
             expt_params = stl10_input.params_scat()
             augm_fn = stl10_input.augmentation_scat
         else:
-            print('experiment', args.experiment,
-                  'not supported for model type', args.model_type)
+            logger.error('experiment {} not supported for model type {}'.format(args.experiment, args.model_type))
             sys.exit(0)
 
         model_params['encoder'] = scattering_encoder.ScatteringEncoder(filters, m)
 
     else:
-        print('model type', args.model_type, 'is not supported!')
+        logger.error('model type {} is not supported!'.format(args.model_type))
         sys.exit(0)
 
 
     encode_size = expt_params.get('encode_size', ENCODE_SIZE)
 
     # data = tuple(data[i][:1000] for i in range(4))
+
+    init_train = args.compute_loss or not ds.augmentation
+    # when using mc augmented samples, initialize before creating other tf stuff
+    if init_train and args.eval_mc_samples > 0:
+        Xtrain, ytrain = get_mc_augmented_training_set(
+            args.experiment, data, augm_fn, args.eval_mc_samples,
+            args.model_type, model_params)
+        Xtrain = Xtrain.astype(solvers.dtype)
+        tf.reset_default_graph()
 
     with tf.device('/cpu:0'):
         if args.experiment == 'infimnist':
@@ -170,8 +229,9 @@ if __name__ == '__main__':
     # leave here to avoid stream executor issues by creating session
     tf.Session()
 
-    init_train = args.compute_loss or not ds.augmentation
-    ds.init_features(args.model_type, model_params, init_train=init_train)
+    # training features already initialized above if mc_samples > 0
+    ds.init_features(args.model_type, model_params,
+                     init_train=init_train and args.eval_mc_samples == 0)
 
     n_classes = expt_params['n_classes']
     Xtest = ds.test_features.astype(solvers.dtype)
@@ -180,11 +240,13 @@ if __name__ == '__main__':
         solvers.normalize(Xtest)
     ytest = ds.test_labels
     if init_train:
-        Xtrain = ds.train_features.astype(solvers.dtype)
+        if not args.eval_mc_samples:
+            Xtrain = ds.train_features.astype(solvers.dtype)
+            ytrain = ds.train_labels
+
         if args.normalize:
             solvers.center(Xtrain)
             solvers.normalize(Xtrain)
-        ytrain = ds.train_labels
 
         if args.encoded_ds_filename:
             np.save(args.encoded_ds_filename,
@@ -265,7 +327,7 @@ if __name__ == '__main__':
             loss_test = []
             for alg, solver in enumerate(solver_list):
                 if not args.no_decay and step == start_decay_step:
-                    print('starting stepsize decay')
+                    logger.info('starting stepsize decay')
                     solver.start_decay()
                     # print('halving stepsize')
                     # solver.decay(0.5)

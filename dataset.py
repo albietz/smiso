@@ -72,9 +72,9 @@ class Dataset(DatasetBase):
                                                  shape=self.train_labels.shape)
         self.indexes_initializer = tf.placeholder(dtype=tf.int64,
                                                   shape=[self.train_data.shape[0]])
-        self.input_images = tf.Variable(self.images_initializer, trainable=False, collections=[])
-        self.input_labels = tf.Variable(self.labels_initializer, trainable=False, collections=[])
-        self.input_indexes = tf.Variable(self.indexes_initializer, trainable=False, collections=[])
+        self.input_images = tf.Variable(self.images_initializer, trainable=False, collections=[], name='input_images')
+        self.input_labels = tf.Variable(self.labels_initializer, trainable=False, collections=[], name='input_labels')
+        self.input_indexes = tf.Variable(self.indexes_initializer, trainable=False, collections=[], name='input_indexes')
 
         if producer_type == 'random_index':
             image, label, index = producer.random_slice_input_producer(
