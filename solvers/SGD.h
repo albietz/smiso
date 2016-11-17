@@ -13,7 +13,9 @@ class SGDBase : public Solver {
   SGDBase(const size_t nfeatures,
           const Double lr,
           const Double lambda,
-          const std::string& loss);
+          const std::string& loss,
+          const std::string& prox = "none",
+          const Double proxWeight = 0);
 
   void startDecay();
 
@@ -48,7 +50,9 @@ class SGD : public SGDBase {
   SGD(const size_t nfeatures,
       const Double lr,
       const Double lambda,
-      const std::string& loss);
+      const std::string& loss,
+      const std::string& prox,
+      const Double proxWeight);
 
   template <typename Derived>
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector

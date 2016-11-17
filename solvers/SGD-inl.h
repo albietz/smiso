@@ -1,5 +1,6 @@
 
 #include "Loss.h"
+#include "Prox.h"
 
 namespace solvers {
 
@@ -13,6 +14,9 @@ void SGD::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
 
   // SGD update
   w_ = w_ - stepSize * (grad_ + lambda_ * w_);
+
+  Prox::applyProx(w_, prox_, stepSize * proxWeight_);
+
 
   ++t_;
 }

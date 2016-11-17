@@ -11,10 +11,14 @@ namespace solvers {
 class Solver {
  public:
   Solver(const size_t nfeatures,
-         const std::string& loss)
+         const std::string& loss,
+         const std::string& prox = "none",
+         const Double proxWeight = 0)
     : nfeatures_(nfeatures),
       w_(Vector::Zero(nfeatures_)),
-      loss_(loss) {
+      loss_(loss),
+      prox_(prox),
+      proxWeight_(proxWeight) {
   }
 
   virtual ~Solver() {
@@ -180,6 +184,10 @@ class Solver {
   mutable Vector w_;
 
   const std::string loss_;
+
+  const std::string prox_;
+
+  const Double proxWeight_;
 };
 
 template <typename SolverT>

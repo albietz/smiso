@@ -6,8 +6,10 @@ namespace solvers {
 SGDBase::SGDBase(const size_t nfeatures,
                  const Double lr,
                  const Double lambda,
-                 const std::string& loss)
-  : Solver(nfeatures, loss),
+                 const std::string& loss,
+                 const std::string& prox,
+                 const Double proxWeight)
+  : Solver(nfeatures, loss, prox, proxWeight),
     lr_(lr),
     lambda_(lambda),
     decay_(false),
@@ -24,8 +26,10 @@ void SGDBase::startDecay() {
 SGD::SGD(const size_t nfeatures,
          const Double lr,
          const Double lambda,
-         const std::string& loss)
-  : SGDBase(nfeatures, lr, lambda, loss), grad_(nfeatures) {
+         const std::string& loss,
+         const std::string& prox,
+         const Double proxWeight)
+  : SGDBase(nfeatures, lr, lambda, loss, prox, proxWeight), grad_(nfeatures) {
 }
 
 SparseSGD::SparseSGD(const size_t nfeatures,

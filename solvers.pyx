@@ -122,7 +122,7 @@ cdef extern from "solvers/Loss.h" namespace "solvers":
 
 cdef extern from "solvers/SGD.h" namespace "solvers":
     cdef cppclass _SGD "solvers::SGD":
-        _SGD(size_t dim, Double lr, Double lmbda, string loss)
+        _SGD(size_t dim, Double lr, Double lmbda, string loss, string prox, Double proxWeight)
         void startDecay()
         void decay(Double mult)
         size_t t()
@@ -160,8 +160,9 @@ cdef class SGD:
     cdef _SGD* solver
 
     def __cinit__(self, size_t dim, Double lr=0.1,
-                  Double lmbda=0., string loss="logistic"):
-        self.solver = new _SGD(dim, lr, lmbda, loss)
+                  Double lmbda=0., string loss="logistic",
+                  string prox="none", Double prox_weight=0.):
+        self.solver = new _SGD(dim, lr, lmbda, loss, prox, prox_weight)
 
     def __dealloc__(self):
         del self.solver
@@ -295,8 +296,9 @@ cdef class SGDOneVsRest:
     cdef OneVsRest[_SGD]* solver
 
     def __cinit__(self, size_t nclasses, size_t dim, Double lr=0.1,
-                  Double lmbda=0., string loss="logistic"):
-        self.solver = new OneVsRest[_SGD](nclasses, dim, lr, lmbda, loss)
+                  Double lmbda=0., string loss="logistic",
+                  string prox="none", Double prox_weight=0.):
+        self.solver = new OneVsRest[_SGD](nclasses, dim, lr, lmbda, loss, prox, prox_weight)
 
     def __dealloc__(self):
         del self.solver

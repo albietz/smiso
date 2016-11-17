@@ -15,7 +15,7 @@ setup(
          'solvers/MISO.cpp',
          'solvers/SAGA.cpp'],
         language='c++',
-        include_dirs=[numpy.get_include()],
+        include_dirs=[numpy.get_include(), 'solvers'],
         extra_compile_args=['-std=c++11', '-fopenmp'],
         extra_link_args=['-std=c++11', '-fopenmp', '-lglog'],
         define_macros=[('USE_FLOAT', USE_FLOAT)],

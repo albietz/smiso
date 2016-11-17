@@ -11,7 +11,7 @@ namespace solvers {
 
 class Prox {
  public:
-  static Double computeNorm(const Vector& w, const std::string& prox) {
+  static Double computePenalty(const Vector& w, const std::string& prox) {
     if (prox == "none") {
       return 0;
     } else if (prox == "l1") {
@@ -32,7 +32,7 @@ class Prox {
         } else if (val < -step) {
           return val + step;
         } else {
-          return 0;
+          return static_cast<Double>(0);
         }
       });
     } else {

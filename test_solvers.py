@@ -29,6 +29,11 @@ def test_sgd():
     solver.iterate(X, y, np.arange(X.shape[0], dtype=np.int64))
     assert not np.any(np.isnan(solver.w))
 
+    l1_solver = solvers.SGD(X[0].shape[0], prox=b'l1', prox_weight=0.01)
+    l1_solver.iterate(X, y, np.arange(X.shape[0], dtype=np.int64))
+    assert not np.any(np.isnan(l1_solver.w))
+    logger.info('L1, zeros: %d/%d', np.sum(l1_solver.w == 0), l1_solver.w.shape[0])
+
 
 def test_sgd_onevsrest():
     loss = b'squared_hinge'
