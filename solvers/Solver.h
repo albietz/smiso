@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "Loss.h"
+#include "Prox.h"
 
 namespace solvers {
 
@@ -52,6 +53,10 @@ class Solver {
 
   Double computeSquaredNorm() const {
     return w().squaredNorm();
+  }
+
+  Double computeProxPenalty() const {
+    return Prox::computePenalty(w(), prox_);
   }
 
   // for dense data
@@ -289,6 +294,16 @@ class OneVsRest {
 #pragma omp parallel for reduction(+:res)
     for (size_t c = 0; c < nclasses_; ++c) {
       res += solvers_[c].w().squaredNorm();
+    }
+
+    return res;
+  }
+
+  Double computeProxPenalty() const {
+    Double res = 0;
+#pragma omp parallel for reduction(+:res)
+    for (size_t c = 0; c < nclasses_; ++c) {
+      res += solvers_[c].computeProxPenalty();
     }
 
     return res;

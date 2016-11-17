@@ -114,6 +114,7 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
                            const Double* const XData,
                            const int32_t* const yData)
         Double computeSquaredNorm()
+        Double computeProxPenalty()
 
 cdef extern from "solvers/Loss.h" namespace "solvers":
     void setGradSigma "solvers::Loss::setGradSigma"(
@@ -132,6 +133,7 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
                            const Double* const XData,
                            const Double* const yData)
         Double computeSquaredNorm()
+        Double computeProxPenalty()
 
     cdef cppclass _SparseSGD "solvers::SparseSGD":
         _SparseSGD(size_t dim, Double lr, Double lmbda, string loss)
@@ -193,6 +195,9 @@ cdef class SGD:
 
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
+
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
 
     def iterate(self,
                 Double[:,::1] X not None,
@@ -334,6 +339,9 @@ cdef class SGDOneVsRest:
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
 
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
+
 
 cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
@@ -350,6 +358,7 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
                            const Double* const XData,
                            const Double* const yData)
         Double computeSquaredNorm()
+        Double computeProxPenalty()
 
     cdef cppclass _SparseMISO "solvers::SparseMISO":
         _SparseMISO(size_t dim, size_t n, Double lmbda, string loss, bool computeLB)
@@ -412,6 +421,9 @@ cdef class MISO:
 
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
+
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
 
     def iterate(self,
                 Double[:,::1] X not None,
@@ -571,6 +583,9 @@ cdef class MISOOneVsRest:
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
 
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
+
 
 cdef extern from "solvers/SAGA.h" namespace "solvers":
     cdef cppclass _SAGA "solvers::SAGA":
@@ -584,6 +599,7 @@ cdef extern from "solvers/SAGA.h" namespace "solvers":
                            const Double* const XData,
                            const Double* const yData)
         Double computeSquaredNorm()
+        Double computeProxPenalty()
 
     cdef cppclass _SparseSAGA "solvers::SparseSAGA":
         _SparseSAGA(size_t dim, size_t n, Double lr, Double lmbda, string loss)
@@ -641,6 +657,9 @@ cdef class SAGA:
 
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
+
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
 
     def iterate(self,
                 Double[:,::1] X not None,
@@ -793,3 +812,6 @@ cdef class SAGAOneVsRest:
 
     def compute_squared_norm(self):
         return self.solver.computeSquaredNorm()
+
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
