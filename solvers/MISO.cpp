@@ -7,8 +7,10 @@ MISOBase::MISOBase(const size_t nfeatures,
                    const size_t nexamples,
                    const Double lambda,
                    const std::string& loss,
-                   const bool computeLB)
-  : Solver(nfeatures, loss),
+                   const bool computeLB,
+                   const std::string& prox,
+                   const Double proxWeight)
+  : Solver(nfeatures, loss, prox, proxWeight),
     n_(nexamples),
     alpha_(1.0),
     lambda_(lambda),
@@ -35,8 +37,10 @@ MISO::MISO(const size_t nfeatures,
            const size_t nexamples,
            const Double lambda,
            const std::string& loss,
-           const bool computeLB)
-  : MISOBase(nfeatures, nexamples, lambda, loss, computeLB),
+           const bool computeLB,
+           const std::string& prox,
+           const Double proxWeight)
+  : MISOBase(nfeatures, nexamples, lambda, loss, computeLB, prox, proxWeight),
     z_(Matrix::Zero(nexamples, nfeatures)),
     grad_(nfeatures),
     zi_(nfeatures) {

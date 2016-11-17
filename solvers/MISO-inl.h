@@ -1,5 +1,6 @@
 
 #include "Loss.h"
+#include "Prox.h"
 #include "Util.h"
 
 namespace solvers {
@@ -26,6 +27,8 @@ void MISO::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
   w_ = w_ + 1.0 / n_ * (zi_ - ziOld);
 
   z_.row(idx) = zi_.transpose();
+
+  Prox::applyProx(w_, prox_, proxWeight_ * stepSize / (n_ * lambda_));
 
   ++t_;
 }

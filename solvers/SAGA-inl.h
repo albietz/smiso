@@ -1,5 +1,6 @@
 
 #include "Loss.h"
+#include "Prox.h"
 #include "Util.h"
 
 namespace solvers {
@@ -18,6 +19,8 @@ void SAGA::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
   gbar_ += 1.0 / n_ * (grad_ - g_.row(idx).transpose());
 
   g_.row(idx) = grad_.transpose();
+
+  Prox::applyProx(w_, prox_, lr_ * proxWeight_);
 
   ++t_;
 }

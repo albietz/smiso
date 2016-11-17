@@ -15,7 +15,9 @@ class SAGABase : public Solver {
            const size_t nexamples,
            const Double lr,
            const Double lambda,
-           const std::string& loss);
+           const std::string& loss,
+           const std::string& prox = "none",
+           const Double proxWeight = 0);
 
   size_t nexamples() const {
     return n_;
@@ -41,7 +43,9 @@ class SAGA : public SAGABase {
        const size_t nexamples,
        const Double lr,
        const Double lambda,
-       const std::string& loss);
+       const std::string& loss,
+       const std::string& prox,
+       const Double proxWeight);
 
   template <typename Derived>
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector

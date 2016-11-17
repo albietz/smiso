@@ -7,16 +7,24 @@ SAGABase::SAGABase(const size_t nfeatures,
                    const size_t nexamples,
                    const Double lr,
                    const Double lambda,
-                   const std::string& loss)
-  : Solver(nfeatures, loss), n_(nexamples), lr_(lr), lambda_(lambda), t_(1) {
+                   const std::string& loss,
+                   const std::string& prox,
+                   const Double proxWeight)
+  : Solver(nfeatures, loss, prox, proxWeight),
+    n_(nexamples),
+    lr_(lr),
+    lambda_(lambda),
+    t_(1) {
 }
 
 SAGA::SAGA(const size_t nfeatures,
            const size_t nexamples,
            const Double lr,
            const Double lambda,
-           const std::string& loss)
-  : SAGABase(nfeatures, nexamples, lr, lambda, loss),
+           const std::string& loss,
+           const std::string& prox,
+           const Double proxWeight)
+  : SAGABase(nfeatures, nexamples, lr, lambda, loss, prox, proxWeight),
     g_(Matrix::Zero(nexamples, nfeatures)),
     grad_(nfeatures),
     gbar_(Vector::Zero(nfeatures)) {

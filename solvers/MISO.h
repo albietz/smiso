@@ -14,7 +14,9 @@ class MISOBase : public Solver {
            const size_t nexamples,
            const Double lambda,
            const std::string& loss,
-           const bool computeLB);
+           const bool computeLB,
+           const std::string& prox = "none",
+           const Double proxWeight = 0);
 
   void startDecay();
 
@@ -61,7 +63,9 @@ class MISO : public MISOBase {
        const size_t nexamples,
        const Double lambda,
        const std::string& loss,
-       const bool computeLB);
+       const bool computeLB,
+       const std::string& prox,
+       const Double proxWeight);
 
   template <typename Derived>
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector

@@ -337,7 +337,8 @@ cdef class SGDOneVsRest:
 
 cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
-        _MISO(size_t dim, size_t n, Double lmbda, string loss, bool computeLB)
+        _MISO(size_t dim, size_t n, Double lmbda, string loss,
+              bool computeLB, string prox, Double proxWeight)
         void startDecay()
         void decay(Double mult)
         size_t t()
@@ -371,8 +372,9 @@ cdef class MISO:
     cdef _MISO* solver
 
     def __cinit__(self, size_t dim, size_t n,
-                  Double lmbda=0.1, string loss="logistic", bool compute_lb=False):
-        self.solver = new _MISO(dim, n, lmbda, loss, compute_lb)
+                  Double lmbda=0.1, string loss="logistic",
+                  bool compute_lb=False, string prox="none", Double prox_weight=0.):
+        self.solver = new _MISO(dim, n, lmbda, loss, compute_lb, prox, prox_weight)
 
     def __dealloc__(self):
         del self.solver
@@ -530,8 +532,10 @@ cdef class MISOOneVsRest:
     cdef OneVsRest[_MISO]* solver
 
     def __cinit__(self, size_t nclasses, size_t dim, size_t n,
-                  Double lmbda=0.1, string loss="logistic", bool compute_lb=False):
-        self.solver = new OneVsRest[_MISO](nclasses, dim, n, lmbda, loss, compute_lb)
+                  Double lmbda=0.1, string loss="logistic",
+                  bool compute_lb=False, string prox="none", Double prox_weight=0.):
+        self.solver = new OneVsRest[_MISO](nclasses, dim, n, lmbda, loss,
+                                           compute_lb, prox, prox_weight)
 
     def __dealloc__(self):
         del self.solver
@@ -570,7 +574,8 @@ cdef class MISOOneVsRest:
 
 cdef extern from "solvers/SAGA.h" namespace "solvers":
     cdef cppclass _SAGA "solvers::SAGA":
-        _SAGA(size_t dim, size_t n, Double lr, Double lmbda, string loss)
+        _SAGA(size_t dim, size_t n, Double lr, Double lmbda,
+              string loss, string prox, Double proxWeight)
         size_t t()
         size_t nfeatures()
         size_t nexamples()
@@ -599,8 +604,9 @@ cdef class SAGA:
     cdef _SAGA* solver
 
     def __cinit__(self, size_t dim, size_t n, Double lr=1.0,
-                  Double lmbda=0.1, string loss="logistic"):
-        self.solver = new _SAGA(dim, n, lr, lmbda, loss)
+                  Double lmbda=0.1, string loss="logistic",
+                  string prox="none", Double prox_weight=0.):
+        self.solver = new _SAGA(dim, n, lr, lmbda, loss, prox, prox_weight)
 
     def __dealloc__(self):
         del self.solver
@@ -750,8 +756,9 @@ cdef class SAGAOneVsRest:
     cdef OneVsRest[_SAGA]* solver
 
     def __cinit__(self, size_t nclasses, size_t dim, size_t n, Double lr=1.0,
-                  Double lmbda=0.1, string loss="logistic"):
-        self.solver = new OneVsRest[_SAGA](nclasses, dim, n, lr, lmbda, loss)
+                  Double lmbda=0.1, string loss="logistic",
+                  string prox="none", Double prox_weight=0.):
+        self.solver = new OneVsRest[_SAGA](nclasses, dim, n, lr, lmbda, loss, prox, prox_weight)
 
     def __dealloc__(self):
         del self.solver

@@ -17,7 +17,6 @@ void SGD::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
 
   Prox::applyProx(w_, prox_, stepSize * proxWeight_);
 
-
   ++t_;
 }
 
