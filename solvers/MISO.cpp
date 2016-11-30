@@ -17,6 +17,7 @@ MISOBase::MISOBase(const size_t nfeatures,
     decay_(false),
     t_(1),
     t0_(1),
+    q_(0),
     computeLB_(computeLB) {
   if (computeLB_) {
     c_ = Vector::Zero(n_);

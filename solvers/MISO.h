@@ -18,6 +18,11 @@ class MISOBase : public Solver {
            const std::string& prox = "none",
            const Double proxWeight = 0);
 
+  template <typename Derived>
+  void setQ(const Eigen::MatrixBase<Derived>& X) {
+    q_ = X;
+  }
+
   void startDecay();
 
   void decay(const Double multiplier = 0.5);
@@ -38,6 +43,10 @@ class MISOBase : public Solver {
       std::min<Double>(alpha_, 2 * static_cast<Double>(n_) / (t_ - t0_ + gamma_)) : alpha_;
   }
 
+  Double getWeight(const size_t idx) const {
+    return q_.size() == 0 ? 1.0 : 1.0 / (q_(idx) * n_);
+  }
+
   const size_t n_; // number of examples/clusters in the dataset
 
   Double alpha_; // step size
@@ -51,6 +60,8 @@ class MISOBase : public Solver {
   size_t t0_;
 
   size_t gamma_; // offset for decaying stepsize C / (gamma + t - t0)
+
+  Vector q_; // weights for non-uniform sampling
 
   bool computeLB_; // whether to compute lower bounds
 
@@ -66,6 +77,9 @@ class MISO : public MISOBase {
        const bool computeLB,
        const std::string& prox,
        const Double proxWeight);
+
+  template <typename Derived>
+  void initQ(const Eigen::MatrixBase<Derived>& X);
 
   template <typename Derived>
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
@@ -125,6 +139,9 @@ class SparseMISO : public MISOBase {
 
   template <typename Derived>
   void initFromX(const Eigen::SparseMatrixBase<Derived>& X);
+
+  template <typename Derived>
+  void initQ(const Eigen::SparseMatrixBase<Derived>& X);
 
   template <typename Derived>
   void iterate(const Eigen::SparseMatrixBase<Derived>& x, // x is a row vector

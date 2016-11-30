@@ -70,6 +70,11 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
             const size_t blockSize,
             const int64_t* const idxData) nogil
 
+    void setQ "solvers::Solver::setQ"[SolverT](
+            SolverT& solver,
+            const size_t n,
+            const Double* const qData)
+
     # for sparse data
     void iterateBlockSparse "solvers::Solver::iterateBlock"[SolverT](
             SolverT& solver,
@@ -93,6 +98,14 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
             const int64_t* const idxData) nogil
 
     void initFromX "solvers::Solver::initFromX"[SolverT](
+            SolverT& solver,
+            const size_t dataSize,
+            const size_t nnz,
+            const int32_t* const Xindptr,
+            const int32_t* const Xindices,
+            const Double* const Xvalues)
+
+    void initQ "solvers::Solver::initQ"[SolverT](
             SolverT& solver,
             const size_t dataSize,
             const size_t nnz,
@@ -485,13 +498,19 @@ cdef class SparseMISO:
     def lower_bound(self):
         return self.solver.lowerBound()
 
-    def init(self, X):
+    def init(self, X, init_q=False):
         assert isinstance(X, sp.csr_matrix)
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        return initFromX[_SparseMISO](deref(self.solver), X.shape[0], X.nnz, &indptr[0],
-                                      &indices[0], &values[0])
+        initFromX[_SparseMISO](deref(self.solver), X.shape[0], X.nnz, &indptr[0],
+                               &indices[0], &values[0])
+        if init_q:
+            initQ[_SparseMISO](deref(self.solver), X.shape[0], X.nnz, &indptr[0],
+                               &indices[0], &values[0])
+
+    def set_q(self, Double[::1] q not None):
+        setQ[_SparseMISO](deref(self.solver), q.shape[0], &q[0])
 
     def compute_loss(self, X, Double[::1] y not None):
         assert isinstance(X, sp.csr_matrix)

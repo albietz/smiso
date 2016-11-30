@@ -6,10 +6,17 @@
 namespace solvers {
 
 template <typename Derived>
+void MISO::initQ(const Eigen::MatrixBase<Derived>& X) {
+  q_ = X.rowwise().squaredNorm();
+  q_ = q_ / q_.sum();
+}
+
+template <typename Derived>
 void MISO::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
                    const Double y,
                    const size_t idx) {
   const Double stepSize = getStepSize();
+  const Double weight = getWeight(idx);
 
   const Double pred = x * w_;
 
@@ -17,11 +24,12 @@ void MISO::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
 
   const auto ziOld = z_.row(idx).transpose();
 
-  zi_ = (1 - stepSize) * ziOld - stepSize / lambda_ * grad_;
+  zi_ = (1 - weight * stepSize) * ziOld - weight * stepSize / lambda_ * grad_;
 
   if (computeLB_) {
-    c_[idx] = (1 - stepSize) * c_[idx] +
-              stepSize * (Loss::computeLoss(loss_, pred, y) - grad_.dot(w_));
+    c_[idx] =
+        (1 - weight * stepSize) * c_[idx] +
+        weight * stepSize * (Loss::computeLoss(loss_, pred, y) - grad_.dot(w_));
   }
 
   w_ = w_ + 1.0 / n_ * (zi_ - ziOld);
@@ -75,11 +83,21 @@ void SparseMISO::initFromX(const Eigen::SparseMatrixBase<Derived>& X) {
 }
 
 template <typename Derived>
+void SparseMISO::initQ(const Eigen::SparseMatrixBase<Derived>& X) {
+  q_.resize(X.rows());
+  for (int i = 0; i < X.rows(); ++i) {
+    q_(i) = X.row(i).squaredNorm();
+  }
+  q_ = q_ / q_.sum();
+}
+
+template <typename Derived>
 void SparseMISO::iterate(
     const Eigen::SparseMatrixBase<Derived>& x, // x is a row vector
     const Double y,
     const size_t idx) {
   const Double stepSize = getStepSize();
+  const Double weight = getWeight(idx);
 
   const Double pred = x * w_;
 
@@ -101,7 +119,7 @@ void SparseMISO::iterate(
   Loss::computeGradient<Vector, RowVectorMap>(grad_, loss_, xMap, pred, y);
 
   ziOld_ = z_.row(idx).transpose();
-  zMap = (1 - stepSize) * zMap - stepSize / lambda_ * grad_;
+  zMap = (1 - weight * stepSize) * zMap - weight * stepSize / lambda_ * grad_;
 
   w_ += 1.0 / n_ * (z_.row(idx).transpose() - ziOld_);
 
