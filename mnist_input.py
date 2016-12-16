@@ -23,8 +23,10 @@ def load_ckn_layers():
 def params():
     return {
         'n_classes': 10,
-        'lmbda': 5e-8,
-        'lrs': [0.1, 0.3, 1.0],
+        'lmbda': [5e-8],
+        'lrs': [0.1, 0.2, 1.0],
+        # 'miso_lrs': [1.0],
+        'saga_lrs': [0.2],
         'results_root': '/scratch/clear/abietti/results/ckn/mnist_py/accs',
         'encode_size': 60000,
     }

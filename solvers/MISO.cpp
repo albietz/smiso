@@ -44,7 +44,8 @@ MISO::MISO(const size_t nfeatures,
   : MISOBase(nfeatures, nexamples, lambda, loss, computeLB, prox, proxWeight),
     z_(Matrix::Zero(nexamples, nfeatures)),
     grad_(nfeatures),
-    zi_(nfeatures) {
+    zi_(nfeatures),
+    zbar_(Vector::Zero(nfeatures)) {
 }
 
 Double MISO::lowerBound() const {

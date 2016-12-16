@@ -19,8 +19,8 @@ class MISOBase : public Solver {
            const Double proxWeight = 0);
 
   template <typename Derived>
-  void setQ(const Eigen::MatrixBase<Derived>& X) {
-    q_ = X;
+  void setQ(const Eigen::MatrixBase<Derived>& q) {
+    q_ = q;
   }
 
   void startDecay();
@@ -94,6 +94,8 @@ class MISO : public MISOBase {
   Vector grad_;
 
   Vector zi_;
+
+  Vector zbar_; // 1/n sum_i z_i: store separately for using prox
 };
 
 // Naive Eigen-based sparse implementation that doesn't require the same

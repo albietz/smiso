@@ -1,4 +1,5 @@
 # distutils: include_dirs = /scratch/clear/abietti/local/include
+# cython: boundscheck=False
 
 import numpy as np
 import scipy.sparse as sp
@@ -125,8 +126,8 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
                      const Double* const XData)
         Double computeLoss(const size_t sz,
                            const Double* const XData,
-                           const int32_t* const yData)
-        Double computeSquaredNorm()
+                           const int32_t* const yData) nogil
+        Double computeSquaredNorm() nogil
         Double computeProxPenalty()
 
 cdef extern from "solvers/Loss.h" namespace "solvers":
@@ -144,9 +145,9 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
         Double* wdata()
         Double computeLoss(const size_t sz,
                            const Double* const XData,
-                           const Double* const yData)
-        Double computeSquaredNorm()
-        Double computeProxPenalty()
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
+        Double computeProxPenalty() nogil
 
     cdef cppclass _SparseSGD "solvers::SparseSGD":
         _SparseSGD(size_t dim, Double lr, Double lmbda, string loss)
@@ -160,8 +161,8 @@ cdef extern from "solvers/SGD.h" namespace "solvers":
                            const int32_t* const Xindptr,
                            const int32_t* const Xindices,
                            const Double* const Xvalues,
-                           const Double* const yData)
-        Double computeSquaredNorm()
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
 
 
 def set_grad_sigma(Double gradSigma):
@@ -207,7 +208,10 @@ cdef class SGD:
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()
@@ -265,16 +269,26 @@ cdef class SparseSGD:
     def decay(self, Double multiplier=0.5):
         self.solver.decay(multiplier)
 
+    def set_q(self, Double[::1] q not None):
+        setQ[_SparseSGD](deref(self.solver), q.shape[0], &q[0])
+
     def compute_loss(self, X, Double[::1] y not None):
         assert isinstance(X, sp.csr_matrix)
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        return self.solver.computeLoss(X.shape[0], X.nnz, &indptr[0],
-                                       &indices[0], &values[0], &y[0])
+        cdef size_t n = X.shape[0], nnz = X.nnz
+        cdef Double loss
+        with nogil:
+            loss = self.solver.computeLoss(n, nnz, &indptr[0],
+                                           &indices[0], &values[0], &y[0])
+        return loss
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def iterate(self, X,
                 Double[::1] y not None,
@@ -283,9 +297,10 @@ cdef class SparseSGD:
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        iterateBlockSparse[_SparseSGD](deref(self.solver),
-                                       X.shape[0],
-                                       X.nnz,
+        cdef size_t n = X.shape[0], nnz = X.nnz
+        with nogil:
+            iterateBlockSparse[_SparseSGD](deref(self.solver),
+                                       n, nnz,
                                        &indptr[0],
                                        &indices[0],
                                        &values[0],
@@ -299,14 +314,15 @@ cdef class SparseSGD:
         cdef Double[:] values = X.data
         cdef int32_t[:] indices = X.indices
         cdef int32_t[:] indptr = X.indptr
-        iterateBlockIndexedSparse[_SparseSGD](deref(self.solver),
-                                              X.shape[0],
-                                              X.nnz,
+        cdef size_t n = X.shape[0], nnz = X.nnz, blockSize = idx.shape[0]
+        with nogil:
+            iterateBlockIndexedSparse[_SparseSGD](deref(self.solver),
+                                              n, nnz,
                                               &indptr[0],
                                               &indices[0],
                                               &values[0],
                                               &y[0],
-                                              idx.shape[0],
+                                              blockSize,
                                               &idx[0])
 
 
@@ -350,7 +366,10 @@ cdef class SGDOneVsRest:
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()
@@ -369,9 +388,9 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
         Double lowerBound()
         Double computeLoss(const size_t sz,
                            const Double* const XData,
-                           const Double* const yData)
-        Double computeSquaredNorm()
-        Double computeProxPenalty()
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
+        Double computeProxPenalty() nogil
 
     cdef cppclass _SparseMISO "solvers::SparseMISO":
         _SparseMISO(size_t dim, size_t n, Double lmbda, string loss, bool computeLB)
@@ -387,8 +406,8 @@ cdef extern from "solvers/MISO.h" namespace "solvers":
                            const int32_t* const Xindptr,
                            const int32_t* const Xindices,
                            const Double* const Xvalues,
-                           const Double* const yData)
-        Double computeSquaredNorm()
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
 
 cdef class MISO:
     cdef _MISO* solver
@@ -433,7 +452,10 @@ cdef class MISO:
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()
@@ -517,11 +539,18 @@ cdef class SparseMISO:
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        return self.solver.computeLoss(X.shape[0], X.nnz, &indptr[0],
-                                       &indices[0], &values[0], &y[0])
+        cdef size_t n = X.shape[0], nnz = X.nnz
+        cdef Double loss
+        with nogil:
+            loss = self.solver.computeLoss(n, nnz, &indptr[0],
+                                           &indices[0], &values[0], &y[0])
+        return loss
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def iterate(self, X,
                 Double[::1] y not None,
@@ -532,9 +561,11 @@ cdef class SparseMISO:
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        iterateBlockSparse[_SparseMISO](deref(self.solver),
-                                        X.shape[0],
-                                        X.nnz,
+        cdef size_t n = X.shape[0], nnz = X.nnz
+        with nogil:
+            iterateBlockSparse[_SparseMISO](deref(self.solver),
+                                        n,
+                                        nnz,
                                         &indptr[0],
                                         &indices[0],
                                         &values[0],
@@ -548,14 +579,15 @@ cdef class SparseMISO:
         cdef Double[:] values = X.data
         cdef int32_t[:] indices = X.indices
         cdef int32_t[:] indptr = X.indptr
-        iterateBlockIndexedSparse[_SparseMISO](deref(self.solver),
-                                               X.shape[0],
-                                               X.nnz,
+        cdef size_t n = X.shape[0], nnz = X.nnz, blockSize = idx.shape[0]
+        with nogil:
+            iterateBlockIndexedSparse[_SparseMISO](deref(self.solver),
+                                               n, nnz,
                                                &indptr[0],
                                                &indices[0],
                                                &values[0],
                                                &y[0],
-                                               idx.shape[0],
+                                               blockSize,
                                                &idx[0])
 
 
@@ -600,7 +632,10 @@ cdef class MISOOneVsRest:
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()
@@ -616,8 +651,8 @@ cdef extern from "solvers/SAGA.h" namespace "solvers":
         Double* wdata()
         Double computeLoss(const size_t sz,
                            const Double* const XData,
-                           const Double* const yData)
-        Double computeSquaredNorm()
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
         Double computeProxPenalty()
 
     cdef cppclass _SparseSAGA "solvers::SparseSAGA":
@@ -631,8 +666,8 @@ cdef extern from "solvers/SAGA.h" namespace "solvers":
                            const int32_t* const Xindptr,
                            const int32_t* const Xindices,
                            const Double* const Xvalues,
-                           const Double* const yData)
-        Double computeSquaredNorm()
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
 
 
 cdef class SAGA:
@@ -675,7 +710,10 @@ cdef class SAGA:
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()
@@ -750,11 +788,18 @@ cdef class SparseSAGA:
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        return self.solver.computeLoss(X.shape[0], X.nnz, &indptr[0],
-                                       &indices[0], &values[0], &y[0])
+        cdef size_t n = X.shape[0], nnz = X.nnz
+        cdef Double loss
+        with nogil:
+            loss = self.solver.computeLoss(n, nnz, &indptr[0],
+                                           &indices[0], &values[0], &y[0])
+        return loss
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def iterate(self, X,
                 Double[::1] y not None,
@@ -765,9 +810,10 @@ cdef class SparseSAGA:
         cdef Double[:] values = X.data
         cdef int32_t[:] indptr = X.indptr
         cdef int32_t[:] indices = X.indices
-        iterateBlockSparse[_SparseSAGA](deref(self.solver),
-                                        X.shape[0],
-                                        X.nnz,
+        cdef size_t n = X.shape[0], nnz = X.nnz
+        with nogil:
+            iterateBlockSparse[_SparseSAGA](deref(self.solver),
+                                        n, nnz,
                                         &indptr[0],
                                         &indices[0],
                                         &values[0],
@@ -781,14 +827,15 @@ cdef class SparseSAGA:
         cdef Double[:] values = X.data
         cdef int32_t[:] indices = X.indices
         cdef int32_t[:] indptr = X.indptr
-        iterateBlockIndexedSparse[_SparseSAGA](deref(self.solver),
-                                               X.shape[0],
-                                               X.nnz,
+        cdef size_t n = X.shape[0], nnz = X.nnz, blockSize = idx.shape[0]
+        with nogil:
+            iterateBlockIndexedSparse[_SparseSAGA](deref(self.solver),
+                                               n, nnz,
                                                &indptr[0],
                                                &indices[0],
                                                &values[0],
                                                &y[0],
-                                               idx.shape[0],
+                                               blockSize,
                                                &idx[0])
 cdef class SAGAOneVsRest:
     cdef OneVsRest[_SAGA]* solver
@@ -830,7 +877,10 @@ cdef class SAGAOneVsRest:
         return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
 
     def compute_squared_norm(self):
-        return self.solver.computeSquaredNorm()
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()

@@ -28,8 +28,13 @@ def params():
 def params_scat():
     return {
         'n_classes': 10,
-        'lmbda': 1e-5,
-        'lrs': [0.1, 0.5, 1.0],
+        # 'lmbda': [1e-3, 1e-4, 1e-5],
+        'lmbda': [1e-5],
+        'lrs': [0.1, 1.0],
+        'prox': 'l1',
+        'prox_weight': 1e-4,
+        'miso_lrs': [0.1, 1.0],
+        'saga_lrs': [0.1, 1.0],
         'results_root': os.path.join(MODEL_DIR, 'accs_scat'),
         'encode_size': 2000,
     }
@@ -41,7 +46,7 @@ def load_ckn_layers_whitened():
 
 def get_scattering_params():
     from skimage.filters.filter_bank import multiresolution_filter_bank_morlet2d
-    filters, lw = multiresolution_filter_bank_morlet2d(128, J=4, L=4, sigma_phi=0.8, sigma_xi=0.8)
+    filters, lw = multiresolution_filter_bank_morlet2d(64, J=4, L=4, sigma_phi=0.8, sigma_xi=0.8)
     m = 2
     return filters, m
 
@@ -120,8 +125,15 @@ def augmentation(image, sz=96):
     return image
 
 
+def augmentation_scat_cropresize(image):
+    return augmentation(image, sz=64)
+
+
 def augmentation_scat(image):
-    return augmentation(image, sz=128)
+    # image = tf.image.random_contrast(image, lower=0.2, upper=1.8)
+    gamma = tf.random_uniform([1], minval=0.6, maxval=1.4)
+    image = image ** gamma
+    return image
 
 
 def augmentation_pad(image):

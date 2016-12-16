@@ -97,6 +97,27 @@ if __name__ == '__main__':
             filters, m = cifar10_input.get_scattering_params()
             expt_params = cifar10_input.params_scat()
             augm_fn = cifar10_input.augmentation
+        elif args.experiment.startswith('stl10'):
+            # format: stl10_<fold><t[est]/v[al]>
+            # e.g. stl10_3v for training with fold 3 and testing with
+            # the rest of the training set as validation set
+            fold = int(args.experiment[6])
+            if args.experiment[7] == 't':
+                data = stl10_input.load_train_test_raw(fold)
+            else:
+                data = stl10_input.load_train_val_raw(fold)
+
+            def resize(im, sz=64):
+                from scipy.misc import imresize
+                resized = np.zeros((im.shape[0], sz, sz, im.shape[3]), dtype=np.float32)
+                for i in range(im.shape[0]):
+                    resized[i] = imresize(im[i], (sz, sz, im.shape[3])).astype(np.float32) / 255
+                return resized
+
+            data = (resize(data[0]), data[1], resize(data[2]), data[3])
+            filters, m = stl10_input.get_scattering_params()
+            expt_params = stl10_input.params_scat()
+            augm_fn = stl10_input.augmentation_scat
         else:
             print('experiment', args.experiment,
                   'not supported for model type', args.model_type)

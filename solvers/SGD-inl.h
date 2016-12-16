@@ -9,11 +9,12 @@ void SGD::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
                   const Double y,
                   const size_t idx) {
   const Double stepSize = getStepSize();
+  const Double weight = getWeight(idx);
 
   Loss::computeGradient<Vector, Derived>(grad_, loss_, x, x * w_, y);
 
   // SGD update
-  w_ = w_ - stepSize * (grad_ + lambda_ * w_);
+  w_ = w_ - weight * stepSize * (grad_ + lambda_ * w_);
 
   Prox::applyProx(w_, prox_, stepSize * proxWeight_);
 
@@ -26,12 +27,13 @@ void SparseSGD::iterate(
     const Double y,
     const size_t idx) {
   const Double stepSize = getStepSize();
+  const Double weight = getWeight(idx);
 
   Loss::computeGradient<SpVector, Derived>(
       grad_, loss_, x, s_ * static_cast<Double>(x * ws_), y);
 
-  s_ *= (1 - stepSize * lambda_);
-  ws_ -= (stepSize / s_) * grad_;
+  s_ *= (1 - weight * stepSize * lambda_);
+  ws_ -= (weight * stepSize / s_) * grad_;
 
   ++t_;
 

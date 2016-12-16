@@ -187,11 +187,19 @@ if __name__ == '__main__':
                 data = stl10_input.load_train_test_raw(fold)
             else:
                 data = stl10_input.load_train_val_raw(fold)
+
             def pad(im):
                 padded = np.zeros((im.shape[0], 128, 128, im.shape[3]), dtype=np.float32)
                 padded[:,16:112,16:112,:] = im
                 return padded
-            data = (pad(data[0]), data[1], pad(data[2]), data[3])
+            def resize(im, sz=64):
+                from scipy.misc import imresize
+                resized = np.zeros((im.shape[0], sz, sz, im.shape[3]), dtype=np.float32)
+                for i in range(im.shape[0]):
+                    resized[i] = imresize(im[i], (sz, sz, im.shape[3])).astype(np.float32) / 255
+                return resized
+
+            data = (resize(data[0]), data[1], resize(data[2]), data[3])
             filters, m = stl10_input.get_scattering_params()
             expt_params = stl10_input.params_scat()
             augm_fn = stl10_input.augmentation_scat
@@ -262,32 +270,40 @@ if __name__ == '__main__':
     if not isinstance(lmbdas, list):
         lmbdas = [lmbdas]
 
+    results_root = expt_params.get('results_root', '')
+    if results_root and not os.path.exists(results_root):
+        os.makedirs(results_root)
+
     for lmbda in lmbdas:
         print('\n\nLambda:', lmbda)
 
         solver_list = []
         solver_params = []
-        miso_lrs = expt_params.get('miso_lrs', [1])
+        prox = expt_params.get('prox', 'none').encode('utf-8')
+        prox_weight = expt_params.get('prox_weight', 0)
+        miso_lrs = expt_params.get('miso_lrs', [])
         print('miso lrs:', miso_lrs)
         for lr in miso_lrs:
-            solver_list.append(solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss))
+            solver_list.append(solvers.MISOOneVsRest(n_classes, dim, n, lmbda=lmbda, loss=loss,
+                                                     prox=prox, prox_weight=prox_weight))
             solver_params.append(dict(name='miso_onevsrest', lmbda=lmbda, loss=loss, lr=lr))
             # adjust miso step-size if needed (with L == 1)
             if loss in [b'logistic', b'squared_hinge']:
                 solver_list[-1].decay(lr * min(1, lmbda * n))
 
-        saga_lrs = expt_params.get('saga_lrs', [1])
+        saga_lrs = expt_params.get('saga_lrs', [])
         print('saga lrs:', saga_lrs)
         for lr in saga_lrs:
-            solver_list.append(solvers.SAGAOneVsRest(n_classes, dim, n,
-                                                     lr=lr, lmbda=lmbda, loss=loss))
+            solver_list.append(solvers.SAGAOneVsRest(n_classes, dim, n, lr=lr, lmbda=lmbda,
+                                                     loss=loss, prox=prox, prox_weight=prox_weight))
             solver_params.append(dict(name='saga_onevsrest', lmbda=lmbda, loss=loss, lr=lr))
 
         lrs = expt_params['lrs']
         print('lrs:', lrs)
         for lr in lrs:
             solver_list.append(solvers.SGDOneVsRest(
-                    n_classes, dim, lr=lr, lmbda=lmbda, loss=loss))
+                    n_classes, dim, lr=lr, lmbda=lmbda, loss=loss,
+                    prox=prox, prox_weight=prox_weight))
             solver_params.append(dict(name='sgd_onevsrest', lr=lr, lmbda=lmbda, loss=loss))
 
         start_time = time.time()
@@ -305,7 +321,7 @@ if __name__ == '__main__':
                          'test_accs': test_accs, 'train_losses': train_losses,
                          'test_losses': test_losses, 'regs': regs},
                         open(os.path.join(
-                         expt_params.get('results_root', ''),
+                         results_root,
                          args.model_type + '_' + args.results_file.format(lmbda=lmbda)), 'wb'))
 
         for step, (e, Xdata, labels, idxs) in enumerate(engine.run(args.nepochs)):
@@ -341,7 +357,8 @@ if __name__ == '__main__':
                 acc_train.append((solver.predict(X) == y).mean())
                 acc_test.append((solver.predict(Xtest) == ytest).mean())
                 if args.compute_loss:
-                    reg.append(0.5 * lmbda * solver.compute_squared_norm())
+                    reg.append(0.5 * lmbda * solver.compute_squared_norm()
+                                + prox_weight * solver.compute_prox_penalty())
                     loss_train.append(solver.compute_loss(Xtrain, ytrain))
                     loss_test.append(solver.compute_loss(Xtest, ytest))
 

@@ -74,7 +74,15 @@ def load_encoded_scat(expt, num_workers=10):
             padded = np.zeros((im.shape[0], 128, 128, im.shape[3]), dtype=np.float32)
             padded[:,16:112,16:112,:] = im
             return padded
-        data = (pad(data[0]), data[1], pad(data[2]), data[3])
+
+        def resize(im, sz=64):
+            from scipy.misc import imresize
+            resized = np.zeros((im.shape[0], sz, sz, im.shape[3]), dtype=np.float32)
+            for i in range(im.shape[0]):
+                resized[i] = imresize(im[i], (sz, sz, im.shape[3])).astype(np.float32) / 255
+            return resized
+
+        data = (resize(data[0]), data[1], resize(data[2]), data[3])
         filters, m = stl10_input.get_scattering_params()
     else:
         print('experiment', expt, 'not supported!')
@@ -142,7 +150,7 @@ if __name__ == '__main__':
     # lmbdas = 2. ** np.arange(-10, -25, -2)
     # lmbdas = 2. ** np.arange(-7, -20, -2)
     # lmbdas = 2. ** np.arange(-20, -31, -2)
-    lmbdas = [6e-4, 4e-4, 2e-4, 9e-5, 4e-5]
+    lmbdas = [6e-4, 4e-4, 2e-4, 9e-5, 4e-5, 9e-6]
     train_accs = []
     test_accs = []
     lmbda_best = None

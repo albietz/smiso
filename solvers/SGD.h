@@ -17,6 +17,11 @@ class SGDBase : public Solver {
           const std::string& prox = "none",
           const Double proxWeight = 0);
 
+  template <typename Derived>
+  void setQ(const Eigen::MatrixBase<Derived>& q) {
+    q_ = q;
+  }
+
   void startDecay();
 
   void decay(const double multiplier = 0.5) {
@@ -32,6 +37,10 @@ class SGDBase : public Solver {
     return decay_ ? 2.0 / (lambda_ * (t_ - t0_ + gamma_)) : lr_;
   }
 
+  Double getWeight(const size_t idx) const {
+    return q_.size() == 0 ? 1.0 : 1.0 / (q_(idx) * q_.size());
+  }
+
   Double lr_;
 
   const Double lambda_;
@@ -43,6 +52,8 @@ class SGDBase : public Solver {
   size_t t0_;
 
   size_t gamma_;
+
+  Vector q_; // weights for non-uniform sampling
 };
 
 class SGD : public SGDBase {

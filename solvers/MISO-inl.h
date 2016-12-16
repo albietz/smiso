@@ -32,11 +32,17 @@ void MISO::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
         weight * stepSize * (Loss::computeLoss(loss_, pred, y) - grad_.dot(w_));
   }
 
-  w_ = w_ + 1.0 / n_ * (zi_ - ziOld);
+  if (prox_ == "none") {
+    w_ = w_ + 1.0 / n_ * (zi_ - ziOld);
+  } else {
+    zbar_ = zbar_ + 1.0 / n_ * (zi_ - ziOld);
+    w_ = zbar_;
+    // w_ = w_ + 1.0 / n_ * (zi_ - ziOld);
+    // Prox::applyProx(w_, prox_, proxWeight_ * stepSize / (n_ * lambda_));
+    Prox::applyProx(w_, prox_, proxWeight_ / lambda_);
+  }
 
   z_.row(idx) = zi_.transpose();
-
-  Prox::applyProx(w_, prox_, proxWeight_ * stepSize / (n_ * lambda_));
 
   ++t_;
 }
