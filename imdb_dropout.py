@@ -16,20 +16,23 @@ DATA_FOLDER = '/scratch/clear/abietti/data/aclImdb'
 
 params = {
     'lmbda': [1e-2],
-    'delta': [0.01, 0.1, 0.3],
+    'delta': [0, 0.01, 0.1, 0.3, 0.5],
     # 'delta': [0],
     'algos': [
         {'name': 'miso_nonu', 'lr': 1.0},
-        {'name': 'miso', 'lr': 10.0},
-        {'name': 'sgd', 'lr': 10.0},
-        {'name': 'saga', 'lr': 10.0},
+        # {'name': 'miso', 'lr': 10.0},
+        # {'name': 'sgd_nonu', 'lr': 1.0},
+        # {'name': 'sgd', 'lr': 10.0},
+        # {'name': 'saga', 'lr': 10.0},
     ],
 }
 
 start_decay = 2
-num_epochs = 400
+num_epochs = 401
 loss = b'squared_hinge'
 eval_delta = 5
+eval_mc_samples = 0
+seed = None
 
 def load_imdb():
     def process_imdb(X, y):
@@ -53,28 +56,39 @@ def training(lmbda, dropout_rate, solver, q=None):
     acc_train = []
     acc_test = []
 
+    random = np.random.RandomState(seed=seed or 43)
+    # prepare evaluation set
+    if dropout_rate > 0 and eval_mc_samples > 0:
+        Xtrain_eval = sp.vstack((Xtrain for _ in range(eval_mc_samples)))
+        Xtrain_eval.sort_indices()
+        Xtrain_eval.data *= random.binomial(1, 1 - dropout_rate, size=Xtrain_eval.nnz) / (1 - dropout_rate)
+        ytrain_eval = np.hstack((ytrain for _ in range(eval_mc_samples)))
+    else:
+        Xtrain_eval = Xtrain
+        ytrain_eval = ytrain
+
     t_start = time.time()
     for epoch in range(num_epochs):
         if epoch % eval_delta == 0:
             ep.append(epoch)
-            loss_train.append(solver.compute_loss(Xtrain, ytrain) + 0.5 * lmbda * solver.compute_squared_norm())
+            loss_train.append(solver.compute_loss(Xtrain_eval, ytrain_eval) + 0.5 * lmbda * solver.compute_squared_norm())
             loss_test.append(solver.compute_loss(Xtest, ytest))
             acc_train.append((((2*ytrain - 1) * Xtrain.dot(solver.w)) >= 0).mean())
             acc_test.append((((2*ytest - 1) * Xtest.dot(solver.w)) >= 0).mean())
 
-        if epoch == start_decay:
+        if epoch == start_decay and dropout_rate > 0:
             solver.start_decay()
 
         if dropout_rate > 0:
-            idxs = np.random.choice(n, n, p=q)
+            idxs = random.choice(n, n, p=q)
             Xtt = Xtrain[idxs]
             Xtt.sort_indices()
-            Xtt.data *= np.random.binomial(1, 1 - dropout_rate, size=Xtt.nnz) / (1 - dropout_rate)
-    #         Xtt *= np.random.binomial(1, 1 - dropout_rate, size=Xtt.shape) / (1 - dropout_rate)
+            Xtt.data *= random.binomial(1, 1 - dropout_rate, size=Xtt.nnz) / (1 - dropout_rate)
+    #         Xtt *= random.binomial(1, 1 - dropout_rate, size=Xtt.shape) / (1 - dropout_rate)
             t = time.time()
             solver.iterate(Xtt, ytrain[idxs], idxs)
         else:
-            idxs = np.random.choice(n, n, p=q)
+            idxs = random.choice(n, n, p=q)
             t = time.time()
             solver.iterate_indexed(Xtrain, ytrain, idxs)
 
@@ -94,6 +108,14 @@ def training(lmbda, dropout_rate, solver, q=None):
 def train_sgd(lmbda, dropout_rate, lr):
     solver = solvers.SparseSGD(d, lr=lr * (1 - dropout_rate)**2 / Lmax, lmbda=lmbda, loss=loss)
     return training(lmbda, dropout_rate, solver)
+
+def train_sgd_nonu(lmbda, dropout_rate, lr):
+    solver = solvers.SparseSGD(d, lr=lr * (1 - dropout_rate)**2 / Lavg, lmbda=lmbda, loss=loss)
+    q = np.asarray(Xtrain.power(2).sum(1)).flatten()
+    q += q.mean()
+    q /= q.sum()
+    solver.set_q(q)
+    return training(lmbda, dropout_rate, solver, q=q)
 
 def train_miso(lmbda, dropout_rate, lr):
     solver = solvers.SparseMISO(d, n, lmbda=lmbda, loss=loss)
@@ -116,7 +138,11 @@ def train_saga(lmbda, dropout_rate, lr):
     solver.init(Xtrain)
     return training(lmbda, dropout_rate, solver)
 
-train_fn = {'sgd': train_sgd, 'miso': train_miso, 'miso_nonu': train_miso_nonu, 'saga': train_saga}
+train_fn = {'sgd': train_sgd,
+            'sgd_nonu': train_sgd_nonu,
+            'miso': train_miso,
+            'miso_nonu': train_miso_nonu,
+            'saga': train_saga}
 
 
 if __name__ == '__main__':
@@ -124,7 +150,11 @@ if __name__ == '__main__':
     parser.add_argument('--num-workers', default=1,
                         type=int, help='number of threads for grid search')
     parser.add_argument('--pdf-file', default=None, help='pdf file to save to')
+    parser.add_argument('--pkl-file', default=None, help='pickle file to save to')
+    parser.add_argument('--seed', default=None, type=int, help='random seed')
     args = parser.parse_args()
+    seed = args.seed
+    print('seed:', seed)
 
     logging.info('loading imdb data')
     Xtrain, ytrain, Xtest, ytest = load_imdb()
@@ -142,6 +172,10 @@ if __name__ == '__main__':
         import curves
         pp = PdfPages(args.pdf_file)
 
+    pkl = None
+    if args.pkl_file is not None:
+        pkl = []
+
     logging.info('training')
     futures = []
     with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
@@ -157,7 +191,7 @@ if __name__ == '__main__':
             for alg, r in res:
                 print(alg['name'], alg['lr'], 'train loss', r['loss_train'][-1],
                       'test acc', r['acc_test'][-1])
-            if pp:
+            if pp or pkl is not None:
                 plot_res = {}
                 plot_res['params'] = [dict(name=alg['name'], lr=alg['lr'], lmbda=lmbda, loss=loss)
                                       for alg, r in res]
@@ -169,9 +203,15 @@ if __name__ == '__main__':
                 plot_res['train_losses'] = transpose('loss_train')
                 plot_res['test_losses'] = transpose('loss_test')
 
-                curves.plot_loss(plot_res, ty='train', log=True, step=1, last=None,
-                                 small=False, legend=True, title='imdb, $\delta$ = {:.2f}'.format(delta))
-                pp.savefig()
+                if pkl is not None:
+                    pkl.append(((lmbda, delta), plot_res))
+                if pp:
+                    curves.plot_loss(plot_res, ty='train', log=True, step=1, last=None,
+                                     small=False, legend=True, title='imdb, $\delta$ = {:.2f}'.format(delta))
+                    pp.savefig()
 
     if pp:
         pp.close()
+    if pkl:
+        import pickle
+        pickle.dump(pkl, open(args.pkl_file, 'wb'))

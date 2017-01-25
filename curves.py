@@ -24,6 +24,8 @@ def algo_label(name, lr):
         s += 'N-SAGA'
     else:
         s += 'SGD'
+        if name.startswith('sgd_nonu'):
+            s += '-NU'
     if lr:
         s += ' $\eta = {}$'.format(lr)
     return s
@@ -76,9 +78,12 @@ def plot_loss(res, ty='train', log=False, step=1, last=-10, legend=True, small=T
 
     plt.title('%s, $\mu = 10^{%d}$' % (title, int(math.log10(res['params'][0]['lmbda']))))
     plt.xlabel('epochs')
-    plt.ylabel('{} {}loss'.format(ty, 'excess ' if log else ''))
+    if ty == 'train':
+        plt.ylabel('f - f*')
+    else:
+        plt.ylabel('{} {}loss'.format(ty, 'excess ' if log else ''))
     if legend:
-        plt.legend(loc='upper right', fontsize=8)
+        plt.legend(loc='upper right', fontsize=7)
     if fname is not None:
         plt.savefig(fname, format='pdf', bbox_inches='tight', pad_inches=0)
 
