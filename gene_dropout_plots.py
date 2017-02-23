@@ -18,9 +18,9 @@ if __name__ == '__main__':
     pp = PdfPages(args.pdf_file)
 
     for (lmbda, delta), plot_res in plots:
-        curves.plot_loss(plot_res, ty='train', log=True, step=4, last=None,
-                         small=True, legend=delta > 0.2, title='imdb dropout, $\delta$ = {:.2f}'.format(delta))
-        plt.savefig('/home/thoth/abietti/shared/imdb_dropout_delta_{:.2f}.pdf'.format(delta), format='pdf', bbox_inches='tight', pad_inches=0)
+        curves.plot_loss(plot_res, ty='train', log=True, step=1, last=-20,
+                         small=True, legend=delta > 0.2, title='gene dropout, $\delta$ = {:.2f}'.format(delta))
+        # plt.savefig('/home/thoth/abietti/shared/gene_dropout_delta_{:.2f}.pdf'.format(delta), format='pdf', bbox_inches='tight', pad_inches=0)
         pp.savefig()
 
     pp.close()

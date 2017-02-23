@@ -47,7 +47,8 @@ def plot_test_acc(res, step=1, last=-10):
     plt.ylabel('test accuracy')
     plt.legend(loc='lower right')
     
-def plot_loss(res, ty='train', log=False, step=1, last=-10, legend=True, small=True, fname=None, title='STL-10 ckn'):
+def plot_loss(res, ty='train', log=False, step=1, last=-10, legend=True, ylabel=None,
+              small=True, fname=None, title='STL-10 ckn', filter_fn=None):
     accs = np.array(res['{}_losses'.format(ty)])
     if 'regs' in res and ty == 'train':
         accs += np.array(res['regs'])
@@ -66,8 +67,11 @@ def plot_loss(res, ty='train', log=False, step=1, last=-10, legend=True, small=T
         plt.figure(figsize=(10,7))
 
 
-    for i in range(accs.shape[1]):
+    for i in [0, 1, 4, 5, 2, 3]: # range(accs.shape[1]):
         p = res['params'][i]
+        if filter_fn and filter_fn(p):
+            print('skipping', p['name'], p['lr'])
+            continue
         if log:
             plt.semilogy(epochs[:last:step], accs[:last:step,i] - best,
                          label=algo_label(p['name'], p.get('lr')),
@@ -76,10 +80,10 @@ def plot_loss(res, ty='train', log=False, step=1, last=-10, legend=True, small=T
             plt.plot(epochs[:last:step],
                      accs[:last:step,i], label=algo_label(p['name'], p.get('lr')))
 
-    plt.title('%s, $\mu = 10^{%d}$' % (title, int(math.log10(res['params'][0]['lmbda']))))
+    plt.title(title)
     plt.xlabel('epochs')
     if ty == 'train':
-        plt.ylabel('f - f*')
+        plt.ylabel(ylabel or 'f - f*')
     else:
         plt.ylabel('{} {}loss'.format(ty, 'excess ' if log else ''))
     if legend:
