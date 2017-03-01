@@ -15,11 +15,28 @@ class SGDBase : public Solver {
           const Double lambda,
           const std::string& loss,
           const std::string& prox = "none",
-          const Double proxWeight = 0);
+          const Double proxWeight = 0,
+          const bool average = false);
 
   template <typename Derived>
   void setQ(const Eigen::MatrixBase<Derived>& q) {
     q_ = q;
+  }
+
+  Vector& w() {
+    if (average_ && decay_) {
+      return wavg_;
+    } else {
+      return w_;
+    }
+  }
+
+  const Vector& w() const {
+    if (average_ && decay_) {
+      return wavg_;
+    } else {
+      return w_;
+    }
   }
 
   void startDecay();
@@ -54,6 +71,10 @@ class SGDBase : public Solver {
   size_t gamma_;
 
   Vector q_; // weights for non-uniform sampling
+
+  Vector wavg_;
+
+  bool average_;
 };
 
 class SGD : public SGDBase {
@@ -63,7 +84,8 @@ class SGD : public SGDBase {
       const Double lambda,
       const std::string& loss,
       const std::string& prox,
-      const Double proxWeight);
+      const Double proxWeight,
+      const bool average);
 
   template <typename Derived>
   void iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
@@ -83,12 +105,12 @@ class SparseSGD : public SGDBase {
 
   Vector& w() {
     updateW();
-    return w_;
+    return SGDBase::w();
   }
 
   const Vector& w() const {
     updateW();
-    return w_;
+    return SGDBase::w();
   }
 
   template <typename Derived>

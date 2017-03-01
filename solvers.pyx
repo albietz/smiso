@@ -137,7 +137,8 @@ cdef extern from "solvers/Loss.h" namespace "solvers":
 
 cdef extern from "solvers/SGD.h" namespace "solvers":
     cdef cppclass _SGD "solvers::SGD":
-        _SGD(size_t dim, Double lr, Double lmbda, string loss, string prox, Double proxWeight)
+        _SGD(size_t dim, Double lr, Double lmbda, string loss,
+             string prox, Double proxWeight, bool average)
         void startDecay()
         void decay(Double mult)
         size_t t()
@@ -177,8 +178,8 @@ cdef class SGD:
 
     def __cinit__(self, size_t dim, Double lr=0.1,
                   Double lmbda=0., string loss="logistic",
-                  string prox="none", Double prox_weight=0.):
-        self.solver = new _SGD(dim, lr, lmbda, loss, prox, prox_weight)
+                  string prox="none", Double prox_weight=0., bool average=False):
+        self.solver = new _SGD(dim, lr, lmbda, loss, prox, prox_weight, average)
 
     def __dealloc__(self):
         del self.solver
@@ -331,8 +332,8 @@ cdef class SGDOneVsRest:
 
     def __cinit__(self, size_t nclasses, size_t dim, Double lr=0.1,
                   Double lmbda=0., string loss="logistic",
-                  string prox="none", Double prox_weight=0.):
-        self.solver = new OneVsRest[_SGD](nclasses, dim, lr, lmbda, loss, prox, prox_weight)
+                  string prox="none", Double prox_weight=0., bool average=False):
+        self.solver = new OneVsRest[_SGD](nclasses, dim, lr, lmbda, loss, prox, prox_weight, average)
 
     def __dealloc__(self):
         del self.solver
@@ -378,7 +379,7 @@ cdef class SGDOneVsRest:
 cdef extern from "solvers/MISO.h" namespace "solvers":
     cdef cppclass _MISO "solvers::MISO":
         _MISO(size_t dim, size_t n, Double lmbda, string loss,
-              bool computeLB, string prox, Double proxWeight)
+              bool computeLB, string prox, Double proxWeight, bool average)
         void startDecay()
         void decay(Double mult)
         size_t t()
@@ -413,9 +414,9 @@ cdef class MISO:
     cdef _MISO* solver
 
     def __cinit__(self, size_t dim, size_t n,
-                  Double lmbda=0.1, string loss="logistic",
-                  bool compute_lb=False, string prox="none", Double prox_weight=0.):
-        self.solver = new _MISO(dim, n, lmbda, loss, compute_lb, prox, prox_weight)
+                  Double lmbda=0.1, string loss="logistic", bool compute_lb=False,
+                  string prox="none", Double prox_weight=0., bool average=False):
+        self.solver = new _MISO(dim, n, lmbda, loss, compute_lb, prox, prox_weight, average)
 
     def __dealloc__(self):
         del self.solver
@@ -595,10 +596,10 @@ cdef class MISOOneVsRest:
     cdef OneVsRest[_MISO]* solver
 
     def __cinit__(self, size_t nclasses, size_t dim, size_t n,
-                  Double lmbda=0.1, string loss="logistic",
-                  bool compute_lb=False, string prox="none", Double prox_weight=0.):
+                  Double lmbda=0.1, string loss="logistic", bool compute_lb=False,
+                  string prox="none", Double prox_weight=0., bool average=False):
         self.solver = new OneVsRest[_MISO](nclasses, dim, n, lmbda, loss,
-                                           compute_lb, prox, prox_weight)
+                                           compute_lb, prox, prox_weight, average)
 
     def __dealloc__(self):
         del self.solver

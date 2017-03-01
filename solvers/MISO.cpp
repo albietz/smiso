@@ -9,7 +9,8 @@ MISOBase::MISOBase(const size_t nfeatures,
                    const std::string& loss,
                    const bool computeLB,
                    const std::string& prox,
-                   const Double proxWeight)
+                   const Double proxWeight,
+                   const bool average)
   : Solver(nfeatures, loss, prox, proxWeight),
     n_(nexamples),
     alpha_(1.0),
@@ -18,9 +19,13 @@ MISOBase::MISOBase(const size_t nfeatures,
     t_(1),
     t0_(1),
     q_(0),
-    computeLB_(computeLB) {
+    computeLB_(computeLB),
+    average_(average) {
   if (computeLB_) {
     c_ = Vector::Zero(n_);
+  }
+  if (average_) {
+    wavg_ = Vector::Zero(nfeatures);
   }
 }
 
@@ -28,6 +33,10 @@ void MISOBase::startDecay() {
   decay_ = true;
   t0_ = t_;
   gamma_ = static_cast<size_t>(2 * static_cast<Double>(n_) / alpha_) + 1;
+
+  if (average_) {
+    wavg_ = w_;
+  }
 }
 
 void MISOBase::decay(const Double multiplier) {
@@ -40,8 +49,16 @@ MISO::MISO(const size_t nfeatures,
            const std::string& loss,
            const bool computeLB,
            const std::string& prox,
-           const Double proxWeight)
-  : MISOBase(nfeatures, nexamples, lambda, loss, computeLB, prox, proxWeight),
+           const Double proxWeight,
+           const bool average)
+  : MISOBase(nfeatures,
+             nexamples,
+             lambda,
+             loss,
+             computeLB,
+             prox,
+             proxWeight,
+             average),
     z_(Matrix::Zero(nexamples, nfeatures)),
     grad_(nfeatures),
     zi_(nfeatures),

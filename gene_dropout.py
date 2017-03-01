@@ -11,22 +11,44 @@ from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO)
 
-params = {
-    'lmbda': [0.003],
-    'delta': [0, 0.01, 0.1, 0.3, 0.5],
-    # 'delta': [0],
-    'algos': [
-        {'name': 'miso', 'lr': 0.1},
-        {'name': 'miso', 'lr': 1.0},
-        {'name': 'sgd', 'lr': 0.1},
-        {'name': 'sgd', 'lr': 1.0},
-        {'name': 'saga', 'lr': 0.1},
-        {'name': 'saga', 'lr': 1.0},
-    ],
-}
+avg_experiment = True
 
-start_decay = 2
-num_epochs = 501
+if not avg_experiment:
+    params = {
+        'lmbda': [0.003],
+        'delta': [0, 0.01, 0.1, 0.3, 0.5],
+        'algos': [
+            {'name': 'miso', 'lr': 0.1},
+            {'name': 'miso', 'lr': 1.0},
+            {'name': 'sgd', 'lr': 0.1},
+            {'name': 'sgd', 'lr': 1.0},
+            {'name': 'saga', 'lr': 0.1},
+            {'name': 'saga', 'lr': 1.0},
+        ],
+    }
+
+    start_decay = 2
+    num_epochs = 501
+else:
+    params = {
+        # 'lmbda': [0.003],
+        'lmbda': [0.0003],
+        # 'delta': [0, 0.01, 0.1, 0.3, 0.5],
+        'delta': [0.1],
+        'algos': [
+            {'name': 'miso', 'lr': 0.1},
+            {'name': 'miso_avg', 'lr': 0.1},
+            {'name': 'sgd', 'lr': 0.1},
+            {'name': 'sgd_avg', 'lr': 0.1},
+        ],
+    }
+
+    # start_decay = 3
+    start_decay = 30
+    # num_epochs = 1001
+    num_epochs = 1501
+
+
 loss = b'logistic'
 eval_delta = 5
 eval_mc_samples = 0
@@ -104,6 +126,10 @@ def train_sgd(lmbda, dropout_rate, lr):
     solver = solvers.SGD(d, lr=lr * (1 - dropout_rate)**2 / Lmax, lmbda=lmbda, loss=loss)
     return training(lmbda, dropout_rate, solver)
 
+def train_sgd_avg(lmbda, dropout_rate, lr):
+    solver = solvers.SGD(d, lr=lr * (1 - dropout_rate)**2 / Lmax, lmbda=lmbda, loss=loss, average=True)
+    return training(lmbda, dropout_rate, solver)
+
 def train_sgd_nonu(lmbda, dropout_rate, lr):
     solver = solvers.SGD(d, lr=lr * (1 - dropout_rate)**2 / Lavg, lmbda=lmbda, loss=loss)
     q = np.asarray((Xtrain ** 2).sum(1)).flatten()
@@ -114,6 +140,11 @@ def train_sgd_nonu(lmbda, dropout_rate, lr):
 
 def train_miso(lmbda, dropout_rate, lr):
     solver = solvers.MISO(d, n, lmbda=lmbda, loss=loss)
+    solver.decay(lr * min(1, n * lmbda * (1 - dropout_rate)**2 / Lmax))
+    return training(lmbda, dropout_rate, solver)
+
+def train_miso_avg(lmbda, dropout_rate, lr):
+    solver = solvers.MISO(d, n, lmbda=lmbda, loss=loss, average=True)
     solver.decay(lr * min(1, n * lmbda * (1 - dropout_rate)**2 / Lmax))
     return training(lmbda, dropout_rate, solver)
 
@@ -131,8 +162,10 @@ def train_saga(lmbda, dropout_rate, lr):
     return training(lmbda, dropout_rate, solver)
 
 train_fn = {'sgd': train_sgd,
+            'sgd_avg': train_sgd_avg,
             'sgd_nonu': train_sgd_nonu,
             'miso': train_miso,
+            'miso_avg': train_miso_avg,
             'miso_nonu': train_miso_nonu,
             'saga': train_saga}
 

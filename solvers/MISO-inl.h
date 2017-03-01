@@ -44,6 +44,11 @@ void MISO::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
 
   z_.row(idx) = zi_.transpose();
 
+  if (average_ && decay_) {
+    const Double avgWeight =
+        2.0 * (gamma_ + t_ - t0_) / ((t_ - t0_ + 1) * (2 * gamma_ + t_ - t0_));
+    wavg_ = (1 - avgWeight) * wavg_ + avgWeight * w_;
+  }
   ++t_;
 }
 

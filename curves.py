@@ -18,14 +18,15 @@ def algo_label(name, lr):
     s = ''
     if name.startswith('miso'):
         s += 'S-MISO'
-        if name.startswith('miso_nonu'):
-        	s += '-NU'
     elif name.startswith('saga'):
         s += 'N-SAGA'
     else:
         s += 'SGD'
-        if name.startswith('sgd_nonu'):
-            s += '-NU'
+
+    if '_avg' in name:
+        s += '-AVG'
+    if '_nonu' in name:
+        s += '-NU'
     if lr:
         s += ' $\eta = {}$'.format(lr)
     return s
@@ -67,7 +68,7 @@ def plot_loss(res, ty='train', log=False, step=1, last=-10, legend=True, ylabel=
         plt.figure(figsize=(10,7))
 
 
-    for i in [0, 1, 4, 5, 2, 3]: # range(accs.shape[1]):
+    for i in range(accs.shape[1]):
         p = res['params'][i]
         if filter_fn and filter_fn(p):
             print('skipping', p['name'], p['lr'])

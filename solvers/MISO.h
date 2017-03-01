@@ -16,11 +16,28 @@ class MISOBase : public Solver {
            const std::string& loss,
            const bool computeLB,
            const std::string& prox = "none",
-           const Double proxWeight = 0);
+           const Double proxWeight = 0,
+           const bool average = false);
 
   template <typename Derived>
   void setQ(const Eigen::MatrixBase<Derived>& q) {
     q_ = q;
+  }
+
+  Vector& w() {
+    if (average_ && decay_) {
+      return wavg_;
+    } else {
+      return w_;
+    }
+  }
+
+  const Vector& w() const {
+    if (average_ && decay_) {
+      return wavg_;
+    } else {
+      return w_;
+    }
   }
 
   void startDecay();
@@ -66,6 +83,10 @@ class MISOBase : public Solver {
   bool computeLB_; // whether to compute lower bounds
 
   Vector c_; // for computing lower bounds
+
+  Vector wavg_;
+
+  bool average_;
 };
 
 class MISO : public MISOBase {
@@ -76,7 +97,8 @@ class MISO : public MISOBase {
        const std::string& loss,
        const bool computeLB,
        const std::string& prox,
-       const Double proxWeight);
+       const Double proxWeight,
+       const bool average);
 
   template <typename Derived>
   void initQ(const Eigen::MatrixBase<Derived>& X);

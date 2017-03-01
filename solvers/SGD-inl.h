@@ -18,6 +18,11 @@ void SGD::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
 
   Prox::applyProx(w_, prox_, stepSize * proxWeight_);
 
+  if (average_ && decay_) {
+    const Double avgWeight =
+        2.0 * (gamma_ + t_ - t0_) / ((t_ - t0_ + 1) * (2 * gamma_ + t_ - t0_));
+    wavg_ = (1 - avgWeight) * wavg_ + avgWeight * w_;
+  }
   ++t_;
 }
 
