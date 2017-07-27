@@ -71,6 +71,12 @@ cdef extern from "solvers/Solver.h" namespace "solvers":
             const size_t blockSize,
             const int64_t* const idxData) nogil
 
+    void computeSnapshot "solvers::Solver::computeSnapshot"[SolverT](
+            SolverT& solver,
+            const size_t dataSize,
+            const Double* const XData,
+            const Double* const yData) nogil
+
     void setQ "solvers::Solver::setQ"[SolverT](
             SolverT& solver,
             const size_t n,
@@ -885,3 +891,96 @@ cdef class SAGAOneVsRest:
 
     def compute_prox_penalty(self):
         return self.solver.computeProxPenalty()
+
+
+cdef extern from "solvers/SVRG.h" namespace "solvers":
+    cdef cppclass _SVRG "solvers::SVRG":
+        _SVRG(size_t dim, size_t n, Double lr, Double lmbda,
+              string loss, string prox, Double proxWeight)
+        size_t t()
+        size_t nfeatures()
+        size_t nexamples()
+        Double* wdata()
+        Double computeLoss(const size_t sz,
+                           const Double* const XData,
+                           const Double* const yData) nogil
+        Double computeSquaredNorm() nogil
+        Double computeProxPenalty()
+
+
+cdef class SVRG:
+    cdef _SVRG* solver
+
+    def __cinit__(self, size_t dim, size_t n, Double lr=1.0,
+                  Double lmbda=0.1, string loss="logistic",
+                  string prox="none", Double prox_weight=0.):
+        self.solver = new _SVRG(dim, n, lr, lmbda, loss, prox, prox_weight)
+
+    def __dealloc__(self):
+        del self.solver
+
+    property nfeatures:
+        def __get__(self):
+            return self.solver.nfeatures()
+
+    property nexamples:
+        def __get__(self):
+            return self.solver.nexamples()
+
+    property w:
+        def __get__(self):
+            cdef np.npy_intp shape[1]
+            shape[0] = self.nfeatures
+            cdef np.ndarray[Double, ndim=1] arr = \
+                np.PyArray_SimpleNewFromData(1, shape, npDOUBLE,
+                                             self.solver.wdata())
+            Py_INCREF(self)
+            PyArray_SetBaseObject(arr, <PyObject*>self)
+            return arr
+
+    def start_decay(self):
+        pass  # self.solver.startDecay()
+
+    def decay(self, Double multiplier=0.5):
+        pass  # self.solver.decay(multiplier)
+
+    def compute_loss(self, Double[:,::1] X not None, Double[::1] y not None):
+        return self.solver.computeLoss(X.shape[0], &X[0,0], &y[0])
+
+    def compute_squared_norm(self):
+        cdef Double norm
+        with nogil:
+            norm = self.solver.computeSquaredNorm()
+        return norm
+
+    def compute_prox_penalty(self):
+        return self.solver.computeProxPenalty()
+
+    def iterate(self,
+                Double[:,::1] X not None,
+                Double[::1] y not None,
+                int64_t[::1] idx not None):
+        iterateBlock[_SVRG](deref(self.solver),
+                            X.shape[0],
+                            &X[0,0],
+                            &y[0],
+                            &idx[0])
+
+    def iterate_indexed(self,
+                        Double[:,::1] X not None,
+                        Double[::1] y not None,
+                        int64_t[::1] idx not None):
+        iterateBlockIndexed[_SVRG](deref(self.solver),
+                                   X.shape[0],
+                                   &X[0,0],
+                                   &y[0],
+                                   idx.shape[0],
+                                   &idx[0])
+
+    def compute_snapshot(self,
+                         Double[:,::1] X not None,
+                         Double[::1] y not None):
+        computeSnapshot[_SVRG](deref(self.solver),
+                               X.shape[0],
+                               &X[0,0],
+                               &y[0])

@@ -102,6 +102,16 @@ class Solver {
   }
 
   template <typename SolverT>
+  static void computeSnapshot(SolverT& solver,
+                              const size_t dataSize,
+                              const Double* const XData,
+                              const Double* const yData) {
+    CHECK_EQ(dataSize, solver.nexamples());
+    const MatrixMap Xmap(XData, dataSize, solver.nfeatures());
+    solver.computeSnapshot(Xmap, yData);
+  }
+
+  template <typename SolverT>
   static void setQ(SolverT& solver, const size_t n, const Double* const qData) {
     const VectorMap qMap(qData, n);
     solver.setQ(qMap);

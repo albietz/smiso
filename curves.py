@@ -20,6 +20,8 @@ def algo_label(name, lr):
         s += 'S-MISO'
     elif name.startswith('saga'):
         s += 'N-SAGA'
+    elif name.startswith('svrg'):
+        s += 'SVRG'
     else:
         s += 'SGD'
 

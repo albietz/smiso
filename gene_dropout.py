@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO)
 
-avg_experiment = True
+avg_experiment = False
 
 if not avg_experiment:
     params = {
@@ -24,6 +24,8 @@ if not avg_experiment:
             {'name': 'sgd', 'lr': 1.0},
             {'name': 'saga', 'lr': 0.1},
             {'name': 'saga', 'lr': 1.0},
+            {'name': 'svrg', 'lr': 0.1},
+            {'name': 'svrg', 'lr': 1.0},
         ],
     }
 
@@ -99,12 +101,21 @@ def training(lmbda, dropout_rate, solver, q=None):
             solver.start_decay()
 
         if dropout_rate > 0:
-            idxs = random.choice(n, n, p=q)
-            Xtt = Xtrain[idxs]
-            Xtt *= random.binomial(1, 1 - dropout_rate, size=Xtt.shape) / (1 - dropout_rate)
-            t = time.time()
-            solver.iterate(Xtt, ytrain[idxs], idxs)
+            if isinstance(solver, solvers.SVRG):  # heuristic from reviewer
+                Xpert = Xtrain * random.binomial(1, 1 - dropout_rate, size=Xtrain.shape).astype(np.float32) / (1 - dropout_rate)
+                solver.compute_snapshot(Xpert, ytrain)
+                idxs = random.choice(n, n, p=q)
+                t = time.time()
+                solver.iterate_indexed(Xpert, ytrain, idxs)
+            else:
+                idxs = random.choice(n, n, p=q)
+                Xtt = Xtrain[idxs]
+                Xtt *= random.binomial(1, 1 - dropout_rate, size=Xtt.shape) / (1 - dropout_rate)
+                t = time.time()
+                solver.iterate(Xtt, ytrain[idxs], idxs)
         else:
+            if isinstance(solver, solvers.SVRG): #  and epoch % 3 == 0:
+                solver.compute_snapshot(Xtrain, ytrain)
             idxs = random.choice(n, n, p=q)
             t = time.time()
             solver.iterate_indexed(Xtrain, ytrain, idxs)
@@ -161,13 +172,18 @@ def train_saga(lmbda, dropout_rate, lr):
     solver = solvers.SAGA(d, n, lr=lr * (1 - dropout_rate)**2 / Lmax, lmbda=lmbda, loss=loss)
     return training(lmbda, dropout_rate, solver)
 
+def train_svrg(lmbda, dropout_rate, lr):
+    solver = solvers.SVRG(d, n, lr=lr * (1 - dropout_rate)**2 / Lmax, lmbda=lmbda, loss=loss)
+    return training(lmbda, dropout_rate, solver)
+
 train_fn = {'sgd': train_sgd,
             'sgd_avg': train_sgd_avg,
             'sgd_nonu': train_sgd_nonu,
             'miso': train_miso,
             'miso_avg': train_miso_avg,
             'miso_nonu': train_miso_nonu,
-            'saga': train_saga}
+            'saga': train_saga,
+            'svrg': train_svrg}
 
 
 if __name__ == '__main__':
