@@ -10,6 +10,8 @@ def whiten_images(X, verbose=True):
             print(idx)
         im = X[idx]
         p = image.extract_patches_2d(im, (3, 3))
+        if p.ndim < 4:
+            p = p[:,:,:,None]
         p -= p.mean((1,2))[:,None,None,:]
         im = image.reconstruct_from_patches_2d(p, (h, w, c))
         p = image.extract_patches_2d(im, (3, 3))

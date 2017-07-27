@@ -55,7 +55,8 @@ if __name__=="__main__":
     parser.add_argument('--network',
         # default='network_cifar.json',
         # default='network_mnist.json',
-        default='network_stl10.json',
+        # default='network_stl10.json',
+        default='network_cifar10_simple.json',
         help='JSON file holding network hyperparameters')
     parser.add_argument('--dataset-file',
         default="/scratch/clear/abietti/data/cifar10_data/whitened.pkl",
@@ -66,7 +67,8 @@ if __name__=="__main__":
     parser.add_argument('--results-root',
         # default='/scratch/clear/abietti/results/ckn/cifar10white_py/',
         # default='/scratch/clear/abietti/results/ckn/mnist_py/',
-        default='/scratch/clear/abietti/results/ckn/stl10_white_3_11/',
+        # default='/scratch/clear/abietti/results/ckn/stl10_white_3_11/',
+        default='/scratch/clear/abietti/results/ckn/cifar10white_simple2/',
         help='Root folder for results.')
     parser.add_argument('-N', '--n-patch-training', type=int,
         default=1000000,
@@ -80,9 +82,10 @@ if __name__=="__main__":
  
 
     # X, y, Xt, yt = load_cifar(args.dataset_file)
-    # X, y, Xt, yt = read_dataset_cifar10_whitened(args.dataset_matfile)
+    X, y, Xt, yt = read_dataset_cifar10_whitened(args.dataset_matfile)
     # X, y = load_mnist()
-    X = load_stl10()
+    # X = load_stl10()
+    # X = (X - X.mean()) / X.std()
 
     print('\nusing network architecture from {}'.format(args.network))
     network_file = os.path.join(args.results_root, 'network.json')
