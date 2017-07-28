@@ -52,6 +52,17 @@ class DatasetBase(object):
             self.test_features = encoder.encode_nhwc(self.test_data)
             print('done encoding. time elapsed', time.time() - t)
 
+        elif model_type == 'resnet':
+            with tf.Session() as sess:
+                model_params['restore_fn'](sess)
+                if init_train:
+                    Xtr = sess.run(model_params['test_net'],
+                                   feed_dict={model_params['test_ph']: self.train_data})
+                    self.train_features = Xtr.reshape(Xtr.shape[0], -1)
+                Xte = sess.run(model_params['test_net'],
+                               feed_dict={model_params['test_ph']: self.test_data})
+                self.test_features = Xte.reshape(Xte.shape[0], -1)
+
     def init(self, sess, coord=None):
         pass
 
@@ -62,7 +73,7 @@ class DatasetBase(object):
 class Dataset(DatasetBase):
     def __init__(self, dataset, augmentation=True, augm_fn=None, num_epochs=None,
                  producer_type='random_index', num_threads=4, batch_size=10000,
-                 capacity=20000, seed=None):
+                 capacity=20000, seed=None, resnet=False):
         super().__init__(dataset, augmentation=augmentation)
 
         # create the queue
@@ -91,10 +102,15 @@ class Dataset(DatasetBase):
         if self.augmentation and augm_fn is not None:
             image = augm_fn(image)
 
+        if resnet:
+            image = tf.subtract(image, 0.5)
+            image = tf.multiply(image, 2.0)
+
         self.images, self.labels, self.indexes = tf.train.batch(
                 [image, label, index], batch_size=batch_size, num_threads=num_threads, capacity=capacity)
-        # switch from NHWC to NCHW for encoding
-        self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
+        if not resnet:
+            # switch from NHWC to NCHW for encoding
+            self.images = tf.transpose(self.images, perm=[0, 3, 1, 2])
 
     def init(self, sess, coord=None):
         sess.run(self.input_images.initializer,

@@ -54,3 +54,37 @@ class DatasetIterator(object):
         self.ds.close(self.sess, self.coord)
         self.encoder.join(self.sess, self.coord)
         self.sess.close()
+
+
+class TFDatasetIterator:
+    def __init__(self, ds, model_type='resnet', model_params=None, encode_size=5000):
+        self.ds = ds
+        self.encode_size = encode_size
+        if self.ds.augmentation:
+            self.encoded = model_params['net']
+
+        self.sess = tf.Session()
+        self.coord = tf.train.Coordinator()
+        self.ds.init(self.sess, self.coord)
+        model_params['restore_fn'](self.sess)
+        if self.ds.augmentation:
+            self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+
+    def run(self, num_epochs):
+        n = self.ds.train_data.shape[0]        
+        n_steps = n * num_epochs // self.encode_size
+        for step in range(n_steps):
+            epoch = float(step) * self.encode_size / n
+            if self.ds.augmentation:
+                X, labels, indexes = self.sess.run(
+                        [self.encoded, self.ds.labels, self.ds.indexes])
+                yield (epoch, X, labels, indexes)
+            else:
+                indexes = np.random.randint(n, size=encode_size)
+                yield (epoch, None, None, indexes)
+
+    def close(self):
+        self.coord.request_stop()
+        self.coord.join(self.threads)
+        self.ds.close(self.sess, self.coord)
+        self.sess.close()

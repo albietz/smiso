@@ -6,10 +6,12 @@ import sys
 import time
 import numpy as np
 import tensorflow as tf
+import tensorflow.contrib.slim.nets
+slim = tf.contrib.slim
 
 import solvers
 import dataset
-from dataset_iterator import DatasetIterator
+from dataset_iterator import TFDatasetIterator, DatasetIterator
 
 import cifar10_input
 import mnist_input
@@ -19,6 +21,13 @@ ENCODE_SIZE = 50000
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__file__)
+
+def resnet_op(inputs, reuse=False):
+    with slim.arg_scope(slim.nets.resnet_v2.resnet_arg_scope()):
+        net, _ = slim.nets.resnet_v2.resnet_v2_50(
+                inputs, num_classes=None, global_pool=True, reuse=reuse, is_training=False)
+    return net
+
 
 def get_mc_augmented_training_set(experiment, data, augm_fn, mc_samples,
                                   model_type, model_params):
@@ -39,7 +48,23 @@ def get_mc_augmented_training_set(experiment, data, augm_fn, mc_samples,
         with tf.device('/cpu:0'):
             ds = dataset.Dataset(data, augmentation=True, augm_fn=augm_fn,
                                  batch_size=num_images, capacity=num_images,
-                                 producer_type='epoch')
+                                 producer_type='epoch', resnet=model_type == 'resnet')
+        if model_type == 'resnet':
+            net = resnet_op(ds.images)
+            with tf.Session() as sess:
+                coord = tf.train.Coordinator()
+                ds.init(sess, coord)
+                model_params['restore_fn'](sess)
+                threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+                X, labels = sess.run([net, ds.labels])
+                X = X.reshape(X.shape[0], -1)
+
+                coord.request_stop()
+                coord.join(threads)
+                ds.close(sess, coord)
+                return X, labels
+
         with tf.Session() as sess:
             coord = tf.train.Coordinator()
             ds.init(sess, coord)
@@ -209,6 +234,22 @@ if __name__ == '__main__':
 
         model_params['encoder'] = scattering_encoder.ScatteringEncoder(filters, m)
 
+    elif args.model_type == 'resnet':
+        import resnet.dataset
+        data = resnet.dataset.load_train_test()
+        expt_params = resnet.dataset.params()
+        augm_fn = resnet.dataset.augment
+
+        CKPT_FILE = '/scratch/clear/abietti/results/smiso/resnet_v2_50/resnet_v2_50.ckpt'
+        # model_params['test_ph'] = tf.placeholder(dtype=tf.float32,
+        #         shape=[None, 224, 224, 3])
+        # model_params['test_net'] = resnet_op(model_params['test_ph'], reuse=False)
+
+        def init_resnet(sess):
+            variables_to_restore = slim.get_model_variables()
+            restorer = tf.train.Saver(variables_to_restore)
+            restorer.restore(sess, CKPT_FILE)
+        model_params['restore_fn'] = init_resnet
     else:
         logger.error('model type {} is not supported!'.format(args.model_type))
         sys.exit(0)
@@ -227,26 +268,35 @@ if __name__ == '__main__':
         Xtrain = Xtrain.astype(solvers.dtype)
         tf.reset_default_graph()
 
-    with tf.device('/cpu:0'):
-        if args.experiment == 'infimnist':
+    if args.experiment == 'infimnist':
+        with tf.device('/cpu:0'):
             ds = dataset.InfimnistDataset(data, batch_size=encode_size, capacity=2*encode_size)
-        else:
+    else:
+        with tf.device('/cpu:0'):
             ds = dataset.Dataset(data, augmentation=args.augmentation, augm_fn=augm_fn,
-                                 batch_size=encode_size, capacity=2*encode_size)
+                                 batch_size=encode_size, capacity=2*encode_size, resnet=args.model_type == 'resnet')
+        if args.model_type == 'resnet':
+            net = resnet_op(ds.images)
+            model_params['net'] = tf.reshape(net, [net.get_shape()[0].value, -1])
 
     # leave here to avoid stream executor issues by creating session
     tf.Session()
 
-    # training features already initialized above if mc_samples > 0
-    ds.init_features(args.model_type, model_params,
-                     init_train=init_train and args.eval_mc_samples == 0)
+    if args.model_type == 'resnet':
+        Xtest = Xtrain
+        ytest = ytrain
+    else:
+        # training features already initialized above if mc_samples > 0
+        ds.init_features(args.model_type, model_params,
+                         init_train=init_train and args.eval_mc_samples == 0)
 
+        Xtest = ds.test_features.astype(solvers.dtype)
+        ytest = ds.test_labels
     n_classes = expt_params['n_classes']
-    Xtest = ds.test_features.astype(solvers.dtype)
+
     if args.normalize:
         solvers.center(Xtest)
         solvers.normalize(Xtest)
-    ytest = ds.test_labels
     if init_train:
         if not args.eval_mc_samples:
             Xtrain = ds.train_features.astype(solvers.dtype)
@@ -308,7 +358,10 @@ if __name__ == '__main__':
 
         start_time = time.time()
 
-        engine = DatasetIterator(ds, args.model_type, model_params, encode_size=encode_size)
+        if args.model_type == 'resnet':
+            engine = TFDatasetIterator(ds, args.model_type, model_params, encode_size=encode_size)
+        else:
+            engine = DatasetIterator(ds, args.model_type, model_params, encode_size=encode_size)
 
         test_accs = []
         train_losses = []
