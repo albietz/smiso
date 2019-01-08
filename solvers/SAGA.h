@@ -23,18 +23,30 @@ class SAGABase : public Solver {
     return n_;
   }
 
+  void startDecay();
+
   size_t t() const {
     return t_;
   }
 
  protected:
+  Double getStepSize() const {
+    return decay_ ? 2.0 / (lambda_ * (t_ - t0_ + gamma_)) : lr_;
+  }
+
   const size_t n_; // number of examples/clusters in the dataset
 
   Double lr_; // step size
 
   const Double lambda_;
 
+  bool decay_;
+
   size_t t_; // iteration
+
+  size_t t0_;
+
+  size_t gamma_;
 };
 
 class SAGA : public SAGABase {

@@ -16,7 +16,8 @@ avg_experiment = False
 if not avg_experiment:
     params = {
         'lmbda': [0.003],
-        'delta': [0, 0.01, 0.1, 0.3, 0.5],
+        # 'delta': [0, 0.01, 0.1, 0.3, 0.5],
+        'delta': [0.1],
         'algos': [
             {'name': 'miso', 'lr': 0.1},
             {'name': 'miso', 'lr': 1.0},

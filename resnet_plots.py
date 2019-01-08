@@ -29,7 +29,7 @@ if __name__ == '__main__':
                          title='ResNet50, $\mu = 10^{{{}}}$'.format(int(math.log10(lmbda))),
                          filter_fn=filter_saga)
 
-        # plt.savefig('/home/thoth/abietti/shared/resnet_mu_{:.0e}.pdf'.format(lmbda), format='pdf', bbox_inches='tight', pad_inches=0)
+        plt.savefig('/home/thoth/abietti/shared/resnet_mu_{:.0e}.pdf'.format(lmbda), format='pdf', bbox_inches='tight', pad_inches=0)
         pp.savefig()
 
     pp.close()

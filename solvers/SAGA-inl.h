@@ -9,18 +9,19 @@ template <typename Derived>
 void SAGA::iterate(const Eigen::MatrixBase<Derived>& x, // x is a row vector
                    const Double y,
                    const size_t idx) {
+  const Double stepSize = getStepSize();
   const Double pred = x * w_;
 
   Loss::computeGradient<Vector, Derived>(grad_, loss_, x, pred, y);
   grad_ += lambda_ * w_;
 
-  w_ = w_ - lr_ * (grad_ - g_.row(idx).transpose() + gbar_);
+  w_ = w_ - stepSize * (grad_ - g_.row(idx).transpose() + gbar_);
 
   gbar_ += 1.0 / n_ * (grad_ - g_.row(idx).transpose());
 
   g_.row(idx) = grad_.transpose();
 
-  Prox::applyProx(w_, prox_, lr_ * proxWeight_);
+  Prox::applyProx(w_, prox_, stepSize * proxWeight_);
 
   ++t_;
 }

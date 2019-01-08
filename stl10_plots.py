@@ -21,9 +21,9 @@ if __name__ == '__main__':
 
     filter_saga = lambda p: 'saga' in p['name'] and p['lr'] > 0.5
 
-    for (lmbda, legend, step) in [(1e-3, True, 6), (1e-4, False, 4), (1e-5, False, 6)]:
+    for (lmbda, legend, step, last) in [(1e-3, True, 6, -16), (1e-4, False, 4, -16), (1e-5, False, 6, None)]:
         res = pickle.load(open(os.path.join(res_dir, 'accs', template.format(lmbda)), 'rb'))
-        curves.plot_loss(res, ty='train', log=True, step=step, last=None,
+        curves.plot_loss(res, ty='train', log=True, step=step, last=last,
                          small=True, legend=legend,
                          title='STL-10 ckn, $\mu = 10^{{{}}}$'.format(int(math.log10(lmbda))),
                          filter_fn=filter_saga)

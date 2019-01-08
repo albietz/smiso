@@ -652,6 +652,7 @@ cdef extern from "solvers/SAGA.h" namespace "solvers":
     cdef cppclass _SAGA "solvers::SAGA":
         _SAGA(size_t dim, size_t n, Double lr, Double lmbda,
               string loss, string prox, Double proxWeight)
+        void startDecay()
         size_t t()
         size_t nfeatures()
         size_t nexamples()
@@ -708,7 +709,7 @@ cdef class SAGA:
             return arr
 
     def start_decay(self):
-        pass  # self.solver.startDecay()
+        self.solver.startDecay()
 
     def decay(self, Double multiplier=0.5):
         pass  # self.solver.decay(multiplier)
