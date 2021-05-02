@@ -7,7 +7,7 @@ import tensorflow as tf
 WHITENED_PKL = '/scratch/clear/abietti/data/cifar10_data/whitened.pkl'
 WHITENED_CKN_MODEL = '/scratch/clear/abietti/results/ckn/cifar10white_py/layers_1.npy'
 
-RAW_DATASET_FOLDER = '/home/clear/dwynen/ckn-dataset/cifar-10-batches-py/'
+RAW_DATASET_FOLDER = '/home/abietti/scratch/data/cifar10_data/cifar-10-batches-py/'
 WHITENED_MAT = '/scratch/clear/abietti/data/cifar10_data/cifar10white.mat'
 
 
